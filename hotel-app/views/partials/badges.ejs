@@ -1,0 +1,6 @@
+<%
+  const statusColors = { active: 'success', vip: 'primary', inactive: 'secondary', suspended: 'danger' };
+  const resColors = { pending: 'warning', confirmed: 'primary', checked_in: 'info', checked_out: 'secondary', cancelled: 'danger' };
+%>
+<% if (typeof customerStatus !== 'undefined' && customerStatus) { %><span class="badge text-bg-<%= statusColors[customerStatus] || 'light' %>"><%= F.STATUS_LABELS[customerStatus] || customerStatus %></span><% } %>
+<% if (typeof reservationStatus !== 'undefined' && reservationStatus) { %><span class="badge text-bg-<%= resColors[reservationStatus] || 'light' %>"><%= F.RESERVATION_LABELS[reservationStatus] || reservationStatus %></span><% } %>

@@ -1,0 +1,32 @@
+<%- include('partials/header') %>
+<div class="page-header">
+  <h1>Bitacora de operaciones</h1>
+  <p class="lead">Eventos administrativos y de seguridad del Key Vault (<%= total %> recientes). Las operaciones wrap/unwrap individuales se cuentan en el panel.</p>
+</div>
+<div class="card">
+  <div class="card-body p-0">
+    <% if (!events.length) { %>
+      <div class="empty-state"><i class="bi bi-journal"></i><p class="mt-2 mb-0">Sin eventos.</p></div>
+    <% } else { %>
+    <div class="table-responsive"><table class="table table-sm table-hover align-middle mb-0">
+      <thead><tr><th>Fecha</th><th>Accion</th><th>Actor</th><th>Resultado</th><th>Detalle</th></tr></thead>
+      <tbody>
+      <% events.forEach(e => { %>
+        <tr><td class="small text-nowrap"><%= fmtDate(e.at) %></td><td><span class="badge text-bg-light border"><%= e.action %></span></td><td class="small"><%= e.actor %></td>
+        <td><span class="badge text-bg-<%= e.outcome === 'success' ? 'success' : 'danger' %>"><%= e.outcome %></span></td>
+        <td class="mono small"><%= Object.keys(e.details || {}).length ? JSON.stringify(e.details) : '' %></td></tr>
+      <% }) %>
+      </tbody></table></div>
+    <% } %>
+  </div>
+  <% if (pages > 1) { %>
+  <div class="card-footer bg-white">
+    <nav aria-label="Paginacion de bitacora"><ul class="pagination pagination-sm mb-0 flex-wrap">
+      <li class="page-item <%= page <= 1 ? 'disabled' : '' %>"><a class="page-link" href="?page=<%= page - 1 %>">Anterior</a></li>
+      <% for (let p = 1; p <= pages; p++) { %><li class="page-item <%= p === page ? 'active' : '' %>"><a class="page-link" href="?page=<%= p %>"><%= p %></a></li><% } %>
+      <li class="page-item <%= page >= pages ? 'disabled' : '' %>"><a class="page-link" href="?page=<%= page + 1 %>">Siguiente</a></li>
+    </ul></nav>
+  </div>
+  <% } %>
+</div>
+<%- include('partials/footer') %>

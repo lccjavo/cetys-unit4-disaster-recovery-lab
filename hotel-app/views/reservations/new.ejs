@@ -1,0 +1,34 @@
+<%- include('../partials/header') %>
+<div class="page-header"><h1>Nueva reservación</h1><p class="lead">La reservación se guarda en la tabla <code>reservations</code>; en el laboratorio 1 puede comprobar que aparece en el standby.</p></div>
+<% if (errors.length) { %><div class="alert alert-danger"><ul class="mb-0"><% errors.forEach(e => { %><li><%= e %></li><% }) %></ul></div><% } %>
+<div class="row"><div class="col-12 col-lg-8 col-xl-6">
+<div class="card"><div class="card-body">
+  <form method="post" action="/reservations" class="needs-validation" novalidate>
+    <input type="hidden" name="_csrf" value="<%= csrf %>">
+    <div class="row g-3">
+      <div class="col-12">
+        <label class="form-label" for="customer_id">Cliente</label>
+        <% if (user.role === 'customer') { %>
+          <input class="form-control" id="customer_id" value="Mi cuenta (<%= user.display_name %>)" disabled>
+        <% } else { %>
+          <select class="form-select" id="customer_id" name="customer_id" required>
+            <option value="">Seleccione un cliente...</option>
+            <% options.forEach(o => { %><option value="<%= o.id %>" <%= String(form.customer_id) === String(o.id) ? 'selected' : '' %>><%= o.customer_code %> · <%= o.full_name %></option><% }) %>
+          </select>
+          <div class="invalid-feedback">Seleccione un cliente.</div>
+        <% } %>
+      </div>
+      <div class="col-12 col-md-6"><label class="form-label" for="room_type">Tipo de habitación</label>
+        <select class="form-select" id="room_type" name="room_type" required><option value="">Seleccione...</option><% F.ROOM_TYPES.forEach(t => { %><option value="<%= t %>" <%= form.room_type === t ? 'selected' : '' %>><%= t %> (<%= money(F.ROOM_RATES[t]) %>/noche)</option><% }) %></select></div>
+      <div class="col-12 col-md-6"><label class="form-label" for="guests_count">Huéspedes</label><input class="form-control" type="number" min="1" max="8" id="guests_count" name="guests_count" required value="<%= form.guests_count %>"></div>
+      <div class="col-12 col-md-6"><label class="form-label" for="check_in">Llegada</label><input class="form-control" type="date" id="check_in" name="check_in" required value="<%= form.check_in || '' %>"></div>
+      <div class="col-12 col-md-6"><label class="form-label" for="check_out">Salida</label><input class="form-control" type="date" id="check_out" name="check_out" required value="<%= form.check_out || '' %>"></div>
+    </div>
+    <div class="d-flex justify-content-between mt-4">
+      <a href="/reservations" class="btn btn-outline-secondary">Cancelar</a>
+      <button class="btn btn-primary" type="submit" data-loading-text="Guardando..."><i class="bi bi-check2-circle me-1"></i>Crear reservación</button>
+    </div>
+  </form>
+</div></div>
+</div></div>
+<%- include('../partials/footer') %>

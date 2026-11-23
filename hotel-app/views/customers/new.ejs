@@ -1,0 +1,72 @@
+<%- include('../partials/header') %>
+<%
+  const val = (k) => form[k] === undefined ? '' : form[k];
+  const sens = (groups) => F.SENSITIVE_FIELDS.filter(f => groups.includes(f.group));
+%>
+<div class="page-header d-flex flex-wrap justify-content-between align-items-end gap-2">
+  <div>
+    <h1>Nuevo cliente ficticio</h1>
+    <p class="lead">Los 20 campos sensibles se cifran en la aplicación con un DEK nuevo antes de enviarse a PostgreSQL.</p>
+  </div>
+  <button type="button" class="btn btn-outline-primary btn-sm" id="generateFakeCustomer"><i class="bi bi-magic me-1"></i>Generar datos ficticios</button>
+</div>
+<% if (errors.length) { %>
+  <div class="alert alert-danger"><strong>Revise el formulario:</strong><ul class="mb-0"><% errors.forEach(e => { %><li><%= e %></li><% }) %></ul></div>
+<% } %>
+<div class="alert alert-warning small"><i class="bi bi-exclamation-triangle me-1"></i>Use solo datos inventados. No capture CVV/CVC ni datos de personas reales. Para tarjetas use números de prueba como <code>4111 1111 1111 1111</code>.</div>
+<form method="post" action="/customers" class="needs-validation" novalidate data-overlay>
+  <input type="hidden" name="_csrf" value="<%= csrf %>">
+  <div class="card">
+    <div class="card-header bg-white pb-0 border-0">
+      <ul class="nav nav-tabs flex-nowrap overflow-auto" role="tablist">
+        <% [['acc', 'Cuenta'], ['ops', 'Preferencias (20 operativos)'], ['per', 'Personal (cifrado)'], ['fin', 'Financiero (cifrado)'], ['fam', 'Acompañantes y emergencia (cifrado)']].forEach(([id, label], i) => { %>
+          <li class="nav-item" role="presentation"><button class="nav-link text-nowrap <%= i === 0 ? 'active' : '' %>" data-bs-toggle="tab" data-bs-target="#f-<%= id %>" type="button" role="tab" aria-controls="f-<%= id %>" aria-selected="<%= i === 0 %>"><%= label %></button></li>
+        <% }) %>
+      </ul>
+    </div>
+    <div class="card-body tab-content">
+      <div class="tab-pane fade show active" id="f-acc" role="tabpanel">
+        <div class="row g-3">
+          <div class="col-12 col-md-6"><label class="form-label" for="full_name">Nombre completo</label><input class="form-control" id="full_name" name="full_name" required minlength="3" value="<%= val('full_name') %>"><div class="invalid-feedback">Obligatorio.</div></div>
+          <div class="col-12 col-md-6"><label class="form-label" for="username">Usuario de acceso (correo .test)</label><input class="form-control" id="username" name="username" type="email" required pattern="[a-z0-9._\-]+@[a-z0-9.\-]+\.test" value="<%= val('username') %>" placeholder="nuevo.cliente@hotel-lab.test"><div class="invalid-feedback">Use un correo ficticio con dominio .test</div></div>
+          <div class="col-12 col-md-6"><label class="form-label" for="password">Contraseña inicial</label><input class="form-control" id="password" name="password" type="password" required minlength="10" autocomplete="new-password"><div class="form-text">Mínimo 10 caracteres. Se guarda como hash Argon2id.</div></div>
+          <div class="col-12 col-md-6"><label class="form-label" for="status">Estado del cliente</label>
+            <select class="form-select" id="status" name="status" required><% F.CUSTOMER_STATUSES.forEach(s => { %><option value="<%= s %>" <%= val('status') === s ? 'selected' : '' %>><%= F.STATUS_LABELS[s] %></option><% }) %></select></div>
+        </div>
+      </div>
+      <div class="tab-pane fade" id="f-ops" role="tabpanel">
+        <div class="row g-3">
+          <% F.OPERATIONAL_FIELDS.forEach(f => { %>
+            <div class="col-12 col-md-6 col-xl-3">
+              <% if (f.type === 'bool') { %>
+                <div class="form-check form-switch mt-4"><input class="form-check-input" type="checkbox" role="switch" id="<%= f.key %>" name="<%= f.key %>" <%= val(f.key) === 'on' || val(f.key) === true ? 'checked' : '' %>><label class="form-check-label" for="<%= f.key %>"><%= f.label %></label></div>
+              <% } else if (f.options) { %>
+                <label class="form-label small" for="<%= f.key %>"><%= f.label %></label>
+                <select class="form-select" id="<%= f.key %>" name="<%= f.key %>" required><option value="">Seleccione...</option><% f.options.forEach(o => { %><option <%= val(f.key) === o ? 'selected' : '' %>><%= o %></option><% }) %></select>
+              <% } else { %>
+                <label class="form-label small" for="<%= f.key %>"><%= f.label %></label>
+                <input class="form-control" id="<%= f.key %>" name="<%= f.key %>" required <%= f.type === 'time' ? 'type=time' : '' %> value="<%= val(f.key) %>">
+              <% } %>
+            </div>
+          <% }) %>
+        </div>
+      </div>
+      <% [['per', ['contact', 'identity']], ['fin', ['financial', 'employment']], ['fam', ['family', 'emergency']]].forEach(([id, groups]) => { %>
+      <div class="tab-pane fade" id="f-<%= id %>" role="tabpanel">
+        <p class="small text-secondary"><i class="bi bi-lock-fill text-cyan me-1"></i>Se cifra cada campo con AES-256-GCM y un nonce distinto.</p>
+        <div class="row g-3">
+          <% sens(groups).forEach(f => { %>
+            <div class="col-12 col-md-6"><label class="form-label small" for="<%= f.key %>"><%= f.label %></label><input class="form-control" id="<%= f.key %>" name="<%= f.key %>" required maxlength="300" value="<%= val(f.key) %>" autocomplete="off"><div class="invalid-feedback">Obligatorio (use "Ninguno" si no aplica).</div></div>
+          <% }) %>
+        </div>
+      </div>
+      <% }) %>
+    </div>
+    <div class="card-footer bg-white d-flex justify-content-between flex-wrap gap-2">
+      <a href="/customers" class="btn btn-outline-secondary">Cancelar</a>
+      <button type="submit" class="btn btn-primary" data-loading-text="Cifrando y guardando..."><i class="bi bi-shield-lock me-1"></i>Cifrar y guardar cliente</button>
+    </div>
+  </div>
+</form>
+<p class="small text-secondary mt-2">Si un campo obligatorio de otra pestaña está vacío, el navegador no enviará el formulario: revise las pestañas o use "Generar datos ficticios".</p>
+<%- include('../partials/footer') %>

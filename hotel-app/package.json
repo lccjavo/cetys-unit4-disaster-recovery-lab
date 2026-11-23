@@ -1,0 +1,26 @@
+{
+  "name": "cetys-hotel-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Hotel Management App (CETYS Unidad 4) con cifrado de sobre AES-256-GCM",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "migrate": "node src/cli/migrate.js",
+    "seed": "node src/cli/seed.js",
+    "verify": "node src/cli/verify.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": { "node": ">=24" },
+  "dependencies": {
+    "argon2": "0.45.2",
+    "bootstrap": "5.3.9",
+    "bootstrap-icons": "1.13.2",
+    "ejs": "3.1.10",
+    "express": "5.3.0",
+    "express-session": "1.19.0",
+    "helmet": "8.3.0",
+    "memorystore": "1.6.8",
+    "pg": "8.23.1"
+  }
+}

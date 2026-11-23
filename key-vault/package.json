@@ -1,0 +1,22 @@
+{
+  "name": "cetys-key-vault",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Key Vault educativo (KMS simulado) para cifrado de sobre DEK/KEK",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "backup": "node src/cli/backup.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": { "node": ">=24" },
+  "dependencies": {
+    "bootstrap": "5.3.9",
+    "bootstrap-icons": "1.13.2",
+    "ejs": "3.1.10",
+    "express": "5.3.0",
+    "express-session": "1.19.0",
+    "helmet": "8.3.0",
+    "memorystore": "1.6.8"
+  }
+}

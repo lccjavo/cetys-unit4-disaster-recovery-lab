@@ -1,0 +1,93 @@
+<%- include('partials/header') %>
+<% const c = d.counts.ok ? d.counts.value : null; const srv = d.db.server; %>
+<div class="page-header d-flex flex-wrap justify-content-between align-items-end gap-2">
+  <div>
+    <h1>Panel de operación</h1>
+    <p class="lead">Resumen del hotel, del estado de PostgreSQL y del Key Vault.</p>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="/customers/new" class="btn btn-cyan btn-sm"><i class="bi bi-person-plus me-1"></i>Nuevo cliente</a>
+    <a href="/reservations/new" class="btn btn-primary btn-sm"><i class="bi bi-calendar-plus me-1"></i>Nueva reservación</a>
+  </div>
+</div>
+
+<div class="row g-3">
+  <% const cards = [
+       ['people-fill', 'Usuarios totales', c ? c.users : 'N/D', c ? `${c.customer_users} clientes + ${c.users - c.customer_users} de personal` : 'BD no disponible'],
+       ['calendar2-week', 'Reservaciones', c ? c.reservations : 'N/D', c ? `${c.upcoming} pendientes o confirmadas` : ''],
+       ['shield-lock-fill', 'Perfiles cifrados', c ? c.encrypted_profiles : 'N/D', c ? `${c.wrapped_deks} DEKs envueltos` : ''],
+       ['key-fill', 'KEK activo', d.vault.available ? (d.vault.active_kek_id || 'ninguno') : 'N/D', d.vault.available ? `Key Vault: ${d.vault.vault_status}` : 'Key Vault no disponible'],
+     ]; %>
+  <% cards.forEach(([icon, label, value, sub]) => { %>
+  <div class="col-12 col-md-6 col-xl-3">
+    <div class="card stat-card h-100"><div class="card-body d-flex gap-3 align-items-center">
+      <span class="stat-icon"><i class="bi bi-<%= icon %>"></i></span>
+      <div class="min-w-0"><div class="stat-label"><%= label %></div><div class="stat-value text-truncate"><%= value %></div><div class="small text-secondary"><%= sub %></div></div>
+    </div></div>
+  </div>
+  <% }) %>
+</div>
+
+<div class="row g-3 mt-1">
+  <div class="col-12 col-md-6 col-lg-4">
+    <div class="card h-100">
+      <div class="card-header"><i class="bi bi-database me-1"></i>PostgreSQL</div>
+      <div class="card-body">
+        <div class="field-row d-flex justify-content-between"><span class="field-label">Conectividad</span>
+          <span><span class="status-dot <%= d.db.status === 'up' ? 'ok' : 'down' %>"></span><%= d.db.status === 'up' ? 'Disponible' : 'No disponible' %></span></div>
+        <div class="field-row d-flex justify-content-between"><span class="field-label">Servidor objetivo</span><span class="mono"><%= d.db.target %></span></div>
+        <div class="field-row d-flex justify-content-between"><span class="field-label">Identidad (cluster_name)</span><span class="mono"><%= srv ? srv.cluster_name : 'N/D' %></span></div>
+        <div class="field-row d-flex justify-content-between"><span class="field-label">Rol</span>
+          <span><% if (srv) { %><span class="badge text-bg-<%= srv.in_recovery ? 'warning' : 'success' %>"><%= srv.in_recovery ? 'Standby (solo lectura)' : 'Primario (lectura/escritura)' %></span><% } else { %>N/D<% } %></span></div>
+        <div class="field-row d-flex justify-content-between"><span class="field-label">Versión / timeline</span><span><%= srv ? `PostgreSQL ${srv.pg_version} / TL ${srv.timeline}` : 'N/D' %></span></div>
+        <div class="field-row d-flex justify-content-between"><span class="field-label">system_identifier</span><span class="mono small"><%= srv ? srv.system_identifier : 'N/D' %></span></div>
+        <% if (d.db.status !== 'up') { %><div class="alert alert-danger small mt-3 mb-0"><%= d.db.lastError %></div><% } %>
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-md-6 col-lg-4">
+    <div class="card h-100">
+      <div class="card-header"><i class="bi bi-safe2 me-1"></i>Key Vault</div>
+      <div class="card-body">
+        <div class="field-row d-flex justify-content-between"><span class="field-label">Conectividad</span>
+          <span><span class="status-dot <%= d.vault.available ? 'ok' : 'down' %>"></span><%= d.vault.available ? 'Disponible' : 'No disponible' %></span></div>
+        <div class="field-row d-flex justify-content-between"><span class="field-label">Estado del almacén</span><span><%= d.vault.vault_status || d.vault.error %></span></div>
+        <div class="field-row d-flex justify-content-between"><span class="field-label">KEK activo</span><span class="mono"><%= d.vault.active_kek_id || 'N/D' %></span></div>
+        <div class="field-row d-flex justify-content-between"><span class="field-label">Versiones de KEK</span><span><%= d.vault.kek_count ?? 'N/D' %></span></div>
+        <div class="field-row d-flex justify-content-between"><span class="field-label">Acceso a llaves</span>
+          <span class="badge text-bg-<%= d.vault.available && !d.vault.access_disabled ? 'success' : 'warning' %>"><%= d.vault.available ? (d.vault.access_disabled ? 'Deshabilitado' : 'Habilitado') : 'N/D' %></span></div>
+        <p class="small text-secondary mt-3 mb-0">Algoritmo de campos: AES-256-GCM con un DEK de 256 bits por cliente, envuelto por el KEK.</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-lg-4">
+    <div class="card h-100">
+      <div class="card-header d-flex justify-content-between"><span><i class="bi bi-activity me-1"></i>Actividad reciente</span><a href="/accounts" class="small">Cuentas</a></div>
+      <div class="card-body">
+        <% if (!d.recent.ok) { %>
+          <div class="empty-state py-3"><i class="bi bi-database-x"></i><p class="mt-2 mb-0">No disponible mientras la base no responda.</p></div>
+        <% } else if (!d.recent.value.length) { %>
+          <div class="empty-state py-3"><i class="bi bi-clock"></i><p class="mt-2 mb-0">Sin actividad todavía.</p></div>
+        <% } else { %>
+          <ul class="timeline">
+            <% d.recent.value.forEach(e => { %>
+              <li><div class="small"><span class="badge text-bg-<%= e.outcome === 'success' ? 'light' : e.outcome === 'denied' ? 'warning' : 'danger' %> border"><%= e.action %></span> <%= e.actor_username %> <% if (e.target_id) { %><span class="text-secondary">&rarr; <%= e.target_type %> <%= e.target_id %></span><% } %></div>
+              <div class="small text-secondary"><%= fmtDate(e.occurred_at) %></div></li>
+            <% }) %>
+          </ul>
+        <% } %>
+      </div>
+    </div>
+  </div>
+</div>
+
+<% if (d.db.incidents && d.db.incidents.length) { %>
+<div class="card mt-3">
+  <div class="card-header"><i class="bi bi-stopwatch me-1"></i>Incidentes de conexión detectados por la aplicación</div>
+  <div class="card-body p-0"><div class="table-responsive"><table class="table table-sm mb-0">
+    <thead><tr><th>Servidor caído</th><th>Inicio</th><th>Restablecido</th><th>Recuperado en</th><th class="text-end">Duración</th></tr></thead>
+    <tbody><% d.db.incidents.forEach(i => { %><tr><td class="mono"><%= i.host %></td><td class="small"><%= fmtDate(i.down_at) %></td><td class="small"><%= i.up_at ? fmtDate(i.up_at) : 'en curso' %></td><td class="mono"><%= i.recovered_on || '' %></td><td class="text-end"><%= i.duration_s !== null ? `${i.duration_s} s` : '...' %></td></tr><% }) %></tbody>
+  </table></div></div>
+</div>
+<% } %>
+<%- include('partials/footer') %>

@@ -1,0 +1,185 @@
+<%- include('partials/header') %>
+<%
+  const srv = s.db.server;
+  const cnt = s.counts.ok ? s.counts.value : null;
+  const arch = s.archiver.ok ? s.archiver.value : null;
+  const ver = s.verification.ok ? s.verification.value : null;
+  const roleLabel = (x) => !x.reachable ? 'No disponible' : x.in_recovery ? 'Standby / en recuperación' : 'Primario (escritura)';
+%>
+<div class="page-header d-flex flex-wrap justify-content-between align-items-end gap-2" data-autorefresh="5">
+  <div>
+    <h1>Recuperación ante desastres</h1>
+    <p class="lead">Estado real de PostgreSQL, replicación, respaldos físicos, archivado de WAL y verificaciones de recuperación.</p>
+  </div>
+  <div class="d-flex align-items-center gap-3">
+    <div class="form-check form-switch mb-0"><input class="form-check-input" type="checkbox" role="switch" id="autoRefreshToggle"><label class="form-check-label small" for="autoRefreshToggle">Actualizar cada 5 s</label></div>
+    <form method="post" action="/dr/verify">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <button type="submit" class="btn btn-cyan btn-sm" data-loading-text="Verificando..." <%= s.db.status === 'up' ? '' : 'disabled' %>><i class="bi bi-clipboard-check me-1"></i>Verificar recuperación</button>
+    </form>
+  </div>
+</div>
+
+<% if (s.splitBrainRisk) { %>
+  <div class="alert alert-danger"><i class="bi bi-exclamation-octagon me-1"></i><strong>Riesgo de split brain:</strong> postgres-primary y postgres-standby aceptan escrituras al mismo tiempo. Detenga uno de ellos de inmediato.</div>
+<% } %>
+<% if (s.control.fenced) { %>
+  <div class="alert alert-warning small"><i class="bi bi-sign-stop me-1"></i>El primario original está <strong>cercado</strong> (archivo <code>/lab-control/primary.fenced</code>): no arrancará como primario aunque se ejecute <code>docker compose up</code>. Para reconstruir use <code>./scripts/reset-lab.sh lab1</code>.</div>
+<% } %>
+
+<div class="row g-3">
+  <div class="col-12 col-md-6 col-xl-3"><div class="card stat-card h-100"><div class="card-body">
+    <div class="stat-label">Servidor actual de la app</div>
+    <div class="stat-value mono"><%= s.db.target %></div>
+    <div class="small mt-1"><span class="status-dot <%= s.db.status === 'up' ? 'ok' : 'down' %>"></span><%= s.db.status === 'up' ? 'Base de datos disponible' : 'Base de datos no disponible' %></div>
+  </div></div></div>
+  <div class="col-12 col-md-6 col-xl-3"><div class="card stat-card h-100"><div class="card-body">
+    <div class="stat-label">Rol del servidor</div>
+    <div class="stat-value"><%= srv ? (srv.in_recovery ? 'Standby' : 'Primario') : 'N/D' %></div>
+    <div class="small text-secondary"><%= srv ? `${srv.cluster_name} · timeline ${srv.timeline}` : (s.db.lastError || '') %></div>
+  </div></div></div>
+  <div class="col-12 col-md-6 col-xl-3"><div class="card stat-card h-100"><div class="card-body">
+    <div class="stat-label">Registros actuales</div>
+    <div class="stat-value"><%= cnt ? cnt.customers : 'N/D' %> <span class="fs-6 fw-normal">clientes</span></div>
+    <div class="small text-secondary"><%= cnt ? `${cnt.reservations} reservaciones · ${cnt.users} usuarios` : 'sin conexión' %></div>
+  </div></div></div>
+  <div class="col-12 col-md-6 col-xl-3"><div class="card stat-card h-100"><div class="card-body">
+    <div class="stat-label">Última verificación de recuperación</div>
+    <% if (ver && ver.length) { const v = ver[0]; %>
+      <div class="stat-value"><span class="badge text-bg-<%= v.outcome === 'success' ? 'success' : v.outcome === 'partial' ? 'warning' : 'danger' %>"><%= v.outcome %></span></div>
+      <div class="small text-secondary"><%= fmtDate(v.verified_at) %> en <%= v.db_server %>: <%= v.decrypted_ok %>/<%= v.sampled_customers %> descifrados</div>
+    <% } else { %><div class="stat-value">Nunca</div><div class="small text-secondary"><%= ver ? 'Pulse "Verificar recuperación"' : 'BD no disponible' %></div><% } %>
+  </div></div></div>
+</div>
+
+<div class="card mt-3">
+  <div class="card-header"><i class="bi bi-hdd-network me-1"></i>Servidores PostgreSQL del laboratorio</div>
+  <div class="card-body p-0"><div class="table-responsive"><table class="table align-middle mb-0">
+    <thead><tr><th>Servicio</th><th>Estado</th><th>Rol</th><th>cluster_name</th><th>Timeline</th><th>Replicación</th><th>Latencia</th><th class="text-end">Conexión de la app</th></tr></thead>
+    <tbody>
+    <% s.candidates.forEach(x => { %>
+      <tr class="<%= x.host === s.db.target ? 'table-info' : '' %>">
+        <td class="mono fw-semibold"><%= x.host %><%= x.host === s.db.target ? ' (actual)' : '' %></td>
+        <td><span class="status-dot <%= x.reachable ? 'ok' : 'off' %>"></span><%= x.reachable ? 'En línea' : 'Sin respuesta' %><% if (!x.reachable) { %><div class="small text-secondary"><%= x.error %></div><% } %></td>
+        <td><span class="badge text-bg-<%= !x.reachable ? 'secondary' : x.in_recovery ? 'warning' : 'success' %>"><%= roleLabel(x) %></span></td>
+        <td class="mono small"><%= x.cluster_name || '' %></td>
+        <td><%= x.timeline || '' %></td>
+        <td class="small">
+          <% if (x.reachable && x.in_recovery && x.standby) { %>
+            Receptor WAL: <strong><%= x.standby.receiver_status || 'sin streaming' %></strong><br>
+            Replay: <span class="mono"><%= x.standby.replay_lsn %></span><br>
+            Retraso: <%= x.standby.replay_delay_s !== null ? `${x.standby.replay_delay_s} s desde la última transacción` : 'N/D' %>
+          <% } else if (x.reachable && x.replicas) { %>
+            <% if (!x.replicas.length) { %>Sin standbys conectados<% } %>
+            <% x.replicas.forEach(r => { %><div><span class="mono"><%= r.application_name %></span> <%= r.state %> (<%= r.sync_state %>), atraso <%= r.lag_bytes %> bytes</div><% }) %>
+          <% } %>
+        </td>
+        <td class="small"><%= x.latency_ms ? `${x.latency_ms} ms` : '' %></td>
+        <td class="text-end">
+          <% if (x.host !== s.db.target && x.reachable && !x.in_recovery) { %>
+            <form method="post" action="/dr/switch" class="d-inline">
+              <input type="hidden" name="_csrf" value="<%= csrf %>"><input type="hidden" name="host" value="<%= x.host %>">
+              <button type="submit" class="btn btn-sm btn-primary" data-confirm="La aplicación del hotel usará <%= x.host %> como servidor de lectura/escritura." data-confirm-title="Cambiar servidor de la aplicación" data-confirm-variant="btn-primary"><i class="bi bi-plug me-1"></i>Conectar la app aquí</button>
+            </form>
+          <% } else if (x.host === s.db.target) { %><span class="small text-secondary">En uso</span><% } %>
+        </td>
+      </tr>
+    <% }) %>
+    </tbody>
+  </table></div></div>
+</div>
+
+<div class="row g-3 mt-1">
+  <div class="col-12 col-lg-6">
+    <div class="card h-100">
+      <div class="card-header"><i class="bi bi-archive me-1"></i>Respaldos físicos (pg_basebackup)</div>
+      <div class="card-body p-0">
+        <% if (!s.backups) { %><div class="empty-state"><i class="bi bi-exclamation-triangle"></i><p class="mt-2 mb-0">El volumen de respaldos no está montado.</p></div>
+        <% } else if (!s.backups.length) { %><div class="empty-state"><i class="bi bi-archive"></i><p class="mt-2 mb-0">Sin respaldos. Cree uno con <code>./scripts/backup.sh db</code></p></div>
+        <% } else { %>
+        <div class="table-responsive"><table class="table table-sm align-middle mb-0">
+          <thead><tr><th>Respaldo</th><th>Terminado</th><th>Origen</th><th class="text-end">Clientes</th><th class="text-end">Tamaño</th><th>Verificado</th></tr></thead>
+          <tbody><% s.backups.slice(0, 8).forEach(b => { %>
+            <tr><td class="mono small"><%= b.name %></td><td class="small"><%= fmtDate(b.finished_at) %></td><td class="mono small"><%= b.source_cluster %> TL<%= b.timeline %></td><td class="text-end"><%= b.customers_at_backup %></td><td class="text-end small"><%= b.size_bytes ? `${(b.size_bytes / 1048576).toFixed(1)} MB` : '' %></td>
+            <td><span class="badge text-bg-<%= b.verified ? 'success' : 'danger' %>"><%= b.verified ? 'pg_verifybackup OK' : 'No' %></span></td></tr>
+          <% }) %></tbody>
+        </table></div>
+        <% } %>
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-lg-6">
+    <div class="card h-100">
+      <div class="card-header"><i class="bi bi-journal-arrow-down me-1"></i>Archivado de WAL</div>
+      <div class="card-body small">
+        <% if (arch) { %>
+          <div class="field-row d-flex justify-content-between"><span class="field-label">archive_mode (servidor actual)</span><span class="badge text-bg-<%= arch.archive_mode === 'on' ? 'success' : 'secondary' %>"><%= arch.archive_mode %></span></div>
+          <div class="field-row d-flex justify-content-between"><span class="field-label">Segmentos archivados (pg_stat_archiver)</span><span><%= arch.archived_count %></span></div>
+          <div class="field-row d-flex justify-content-between"><span class="field-label">Último WAL archivado</span><span class="mono"><%= arch.last_archived_wal || 'ninguno' %></span></div>
+          <div class="field-row d-flex justify-content-between"><span class="field-label">Hora del último archivado</span><span><%= arch.last_archived_time ? fmtDate(arch.last_archived_time) : 'N/D' %></span></div>
+          <div class="field-row d-flex justify-content-between"><span class="field-label">Fallos de archivado</span><span class="<%= arch.failed_count > 0 ? 'text-danger fw-semibold' : '' %>"><%= arch.failed_count %><%= arch.last_failed_wal ? ` (último: ${arch.last_failed_wal})` : '' %></span></div>
+        <% } else { %><div class="alert alert-warning py-2">pg_stat_archiver no disponible: <%= s.archiver.message %></div><% } %>
+        <% if (s.wal.available) { %>
+          <div class="field-row d-flex justify-content-between"><span class="field-label">Archivos en /wal-archive</span><span><%= s.wal.count %> (<%= s.wal.segments %> segmentos)</span></div>
+          <div class="field-row d-flex justify-content-between"><span class="field-label">Archivo más reciente</span><span class="mono"><%= s.wal.latest || 'ninguno' %></span></div>
+          <% if (s.wal.history.length) { %><div class="field-row d-flex justify-content-between"><span class="field-label">Historias de timeline</span><span class="mono"><%= s.wal.history.join(', ') %></span></div><% } %>
+        <% } else { %><div class="alert alert-warning py-2 mt-2">No se puede leer /wal-archive (<%= s.wal.error %>).</div><% } %>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mt-1">
+  <div class="col-12 col-lg-4">
+    <div class="card h-100">
+      <div class="card-header"><i class="bi bi-bookmark-star me-1"></i>Puntos de restauración y PITR</div>
+      <div class="card-body small">
+        <% if (!s.control.restorePoints.length) { %><p class="text-secondary">Sin puntos creados. Use <code>./scripts/lab2-recovery-point.sh antes_borrado</code></p><% } %>
+        <ul class="timeline"><% s.control.restorePoints.slice(0, 5).forEach(r => { %><li><span class="mono fw-semibold"><%= r.name %></span><div class="text-secondary"><%= fmtDate(r.at) %> · LSN <%= r.lsn %></div></li><% }) %></ul>
+        <% if (s.control.lastRestore) { const lr = s.control.lastRestore; %>
+          <hr><div class="fw-semibold">Última recuperación PITR</div>
+          <div>Respaldo base: <span class="mono"><%= lr.backup %></span></div>
+          <div>Objetivo: <span class="mono"><%= lr.target_name || lr.target_time %></span></div>
+          <div>Estado: <span class="badge text-bg-<%= lr.status === 'completed' ? 'success' : 'warning' %>"><%= lr.status %></span> <%= lr.completed_at ? fmtDate(lr.completed_at) : fmtDate(lr.prepared_at) %></div>
+          <% if (lr.duration_s) { %><div>Duración de la recuperación: <%= lr.duration_s %> s</div><% } %>
+          <% if (lr.customers !== undefined) { %><div>Clientes recuperados: <%= lr.customers %></div><% } %>
+        <% } %>
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-lg-4">
+    <div class="card h-100">
+      <div class="card-header"><i class="bi bi-stopwatch me-1"></i>Tiempo de recuperación medido por la app</div>
+      <div class="card-body small">
+        <% if (!s.db.incidents.length) { %><p class="text-secondary mb-0">Sin incidentes de conexión registrados.</p><% } %>
+        <ul class="timeline"><% s.db.incidents.forEach(i => { %>
+          <li><span class="fw-semibold"><%= i.host %></span> caído <%= fmtDate(i.down_at) %>
+          <div class="text-secondary"><%= i.up_at ? `Restablecido en ${i.recovered_on} tras ${i.duration_s} s` : 'Incidente en curso' %></div></li>
+        <% }) %></ul>
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-lg-4">
+    <div class="card h-100">
+      <div class="card-header"><i class="bi bi-arrow-left-right me-1"></i>Conmutaciones (failover)</div>
+      <div class="card-body small">
+        <% if (!s.control.failovers.length && !s.control.targets.length) { %><p class="text-secondary mb-0">Sin conmutaciones registradas.</p><% } %>
+        <ul class="timeline">
+          <% s.control.failovers.slice(0, 3).forEach(f => { %><li><span class="fw-semibold">Promoción de <%= f.promoted %></span><div class="text-secondary"><%= fmtDate(f.promoted_at) %> · promoción <%= f.promote_seconds %> s<%= f.outage_seconds ? ` · caída total ${f.outage_seconds} s` : '' %></div></li><% }) %>
+          <% s.control.targets.slice(0, 4).forEach(t => { %><li><span class="mono"><%= t.from %> &rarr; <%= t.to %></span><div class="text-secondary"><%= fmtDate(t.at) %> · <%= t.actor %> · <%= t.reason %></div></li><% }) %>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<% if (ver && ver.length > 1) { %>
+<div class="card mt-3">
+  <div class="card-header"><i class="bi bi-clipboard-data me-1"></i>Historial de verificaciones</div>
+  <div class="card-body p-0"><div class="table-responsive"><table class="table table-sm mb-0">
+    <thead><tr><th>Fecha</th><th>Servidor</th><th class="text-end">Clientes</th><th class="text-end">Reservaciones</th><th class="text-end">Descifrados</th><th>Resultado</th></tr></thead>
+    <tbody><% ver.forEach(v => { %><tr><td class="small"><%= fmtDate(v.verified_at) %></td><td class="mono"><%= v.db_server %></td><td class="text-end"><%= v.customers_count %></td><td class="text-end"><%= v.reservations_count %></td><td class="text-end"><%= v.decrypted_ok %>/<%= v.sampled_customers %></td><td><span class="badge text-bg-<%= v.outcome === 'success' ? 'success' : 'warning' %>"><%= v.outcome %></span></td></tr><% }) %></tbody>
+  </table></div></div>
+</div>
+<% } %>
+<%- include('partials/footer') %>

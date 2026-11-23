@@ -1,0 +1,52 @@
+<%- include('partials/header') %>
+<div class="page-header">
+  <h1>Rotacion de llaves</h1>
+  <p class="lead">Crear una nueva version de KEK. Las envolturas futuras usaran la nueva version; las anteriores siguen siendo descifrables.</p>
+</div>
+<div class="row g-3">
+  <div class="col-12 col-lg-5">
+    <div class="card">
+      <div class="card-header"><i class="bi bi-arrow-repeat me-1"></i>Rotacion controlada</div>
+      <div class="card-body">
+        <p>KEK activo actual: <span class="mono fw-semibold"><%= s.active_kek_id || 'ninguno' %></span></p>
+        <p class="small text-secondary">Al rotar se genera <span class="mono">kek-v<%= s.kek_count + 1 %></span>, se marca como activo, la version anterior queda retirada y se crea un respaldo automatico del keystore.</p>
+        <form method="post" action="/rotation" id="rotateForm">
+          <input type="hidden" name="_csrf" value="<%= csrf %>">
+          <button type="submit" class="btn btn-cyan" <%= s.vault_status !== 'READY' ? 'disabled' : '' %>
+            data-confirm="Se creara un nuevo KEK y sera el activo para todas las envolturas futuras. Los KEK anteriores se conservan."
+            data-confirm-title="Rotar KEK" data-confirm-variant="btn-cyan"><i class="bi bi-plus-circle me-1"></i>Crear kek-v<%= s.kek_count + 1 %> y activarlo</button>
+        </form>
+      </div>
+    </div>
+    <div class="card mt-3"><div class="card-body small">
+      <h2 class="h6">Como verificarlo en el hotel</h2>
+      <ol class="mb-0">
+        <li>Rote el KEK aqui.</li>
+        <li>En <code>http://localhost:3000/customers/new</code> cree un cliente nuevo.</li>
+        <li>En su pestana <em>Detalles de cifrado</em> el <code>kek_id</code> sera el nuevo.</li>
+        <li>Un cliente anterior conserva <code>kek-v1</code> y sigue revelando sus datos.</li>
+      </ol>
+    </div></div>
+  </div>
+  <div class="col-12 col-lg-7">
+    <div class="card">
+      <div class="card-header"><i class="bi bi-clock-history me-1"></i>Historial de rotacion</div>
+      <div class="card-body p-0">
+        <% if (!s.rotation_history.length) { %>
+          <div class="empty-state"><i class="bi bi-clock"></i><p class="mt-2 mb-0">Sin historial.</p></div>
+        <% } else { %>
+        <div class="table-responsive"><table class="table align-middle mb-0">
+          <thead><tr><th>Fecha</th><th>Accion</th><th>Detalle</th><th>Actor</th></tr></thead>
+          <tbody>
+          <% s.rotation_history.forEach(h => { %>
+            <tr><td class="small"><%= fmtDate(h.at) %></td><td><span class="badge text-bg-light border"><%= h.action %></span></td>
+            <td class="mono small"><%= h.action === 'rotate' ? `${h.from} -> ${h.kek_id}` : (h.kek_id || ((h.added || []).length ? 'agregados: ' + h.added.join(', ') : (h.from_backup || ''))) %></td>
+            <td class="small"><%= h.actor %></td></tr>
+          <% }) %>
+          </tbody></table></div>
+        <% } %>
+      </div>
+    </div>
+  </div>
+</div>
+<%- include('partials/footer') %>

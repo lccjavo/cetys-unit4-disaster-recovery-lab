@@ -1,0 +1,2 @@
+<% const map = { READY: ['success', 'Disponible'], KEYSTORE_MISSING: ['danger', 'Keystore ausente'], UNINITIALIZED: ['secondary', 'Sin inicializar'] }; const m = map[st] || ['secondary', st]; %>
+<span class="badge text-bg-<%= m[0] %>"><%= m[1] %></span>

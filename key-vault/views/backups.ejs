@@ -1,0 +1,62 @@
+<%- include('partials/header') %>
+<div class="page-header">
+  <h1>Respaldo y recuperacion de KEK</h1>
+  <p class="lead">Respaldos independientes de los respaldos de PostgreSQL. Se guardan cifrados (AES-256-GCM, llave derivada con scrypt de <code>VAULT_BACKUP_PASSPHRASE</code>) en el volumen <code>vault-backups</code> (<code><%= backupDir %></code>).</p>
+</div>
+<div class="row g-3">
+  <div class="col-12 col-lg-4">
+    <div class="card">
+      <div class="card-header"><i class="bi bi-archive me-1"></i>Crear respaldo</div>
+      <div class="card-body">
+        <p class="small">Estado del almacen: <%- include('partials/statusbadge', { st: s.vault_status }) %></p>
+        <p class="small">Ultimo respaldo: <strong><%= s.last_backup ? fmtDate(s.last_backup.at) : 'nunca' %></strong></p>
+        <form method="post" action="/backups">
+          <input type="hidden" name="_csrf" value="<%= csrf %>">
+          <button class="btn btn-primary" type="submit" data-loading-text="Respaldando..." <%= s.vault_status !== 'READY' ? 'disabled' : '' %>><i class="bi bi-download me-1"></i>Respaldar KEKs ahora</button>
+        </form>
+        <p class="small text-secondary mt-3 mb-0">Desde la terminal: <code>./scripts/backup.sh keys</code></p>
+      </div>
+    </div>
+    <div class="card mt-3"><div class="card-body small">
+      <h2 class="h6">Reglas de la restauracion</h2>
+      <ul class="mb-0">
+        <li>Solo agrega los KEK que faltan.</li>
+        <li>Si un KEK existe con el mismo <code>kek_id</code> pero distinto material, se rechaza (nunca se reemplaza en silencio).</li>
+        <li>Se valida la etiqueta GCM y la suma SHA-256 del contenido.</li>
+      </ul>
+    </div></div>
+  </div>
+  <div class="col-12 col-lg-8">
+    <div class="card">
+      <div class="card-header"><i class="bi bi-list-ul me-1"></i>Respaldos disponibles (<%= backups.length %>)</div>
+      <div class="card-body p-0">
+        <% if (!backups.length) { %>
+          <div class="empty-state"><i class="bi bi-archive"></i><p class="mt-2 mb-0">Todavia no hay respaldos.</p></div>
+        <% } else { %>
+        <div class="table-responsive"><table class="table table-hover align-middle mb-0">
+          <thead><tr><th>Archivo</th><th>Fecha</th><th>KEKs</th><th>SHA-256</th><th class="text-end">Accion</th></tr></thead>
+          <tbody>
+          <% backups.forEach((b, i) => { %>
+            <tr>
+              <td class="mono small"><%= b.file %></td>
+              <td class="small"><%= fmtDate(b.created_at) %></td>
+              <td class="mono small"><%= (b.kek_ids || []).join(', ') %></td>
+              <td class="mono small"><%= (b.sha256 || '').slice(0, 12) %></td>
+              <td class="text-end">
+                <form method="post" action="/backups/restore" id="restore-<%= i %>" class="d-inline">
+                  <input type="hidden" name="_csrf" value="<%= csrf %>">
+                  <input type="hidden" name="file" value="<%= b.file %>">
+                  <button type="submit" class="btn btn-sm btn-outline-primary"
+                    data-confirm="Se restauraran los KEK faltantes desde <%= b.file %>. Los KEK existentes no se modifican."
+                    data-confirm-title="Restaurar KEK" data-confirm-variant="btn-primary"><i class="bi bi-upload me-1"></i>Restaurar</button>
+                </form>
+              </td>
+            </tr>
+          <% }) %>
+          </tbody></table></div>
+        <% } %>
+      </div>
+    </div>
+  </div>
+</div>
+<%- include('partials/footer') %>

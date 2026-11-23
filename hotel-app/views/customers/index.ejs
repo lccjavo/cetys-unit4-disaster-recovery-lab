@@ -1,0 +1,115 @@
+<%- include('../partials/header') %>
+<div class="page-header d-flex flex-wrap justify-content-between align-items-end gap-2">
+  <div>
+    <h1>Directorio de clientes</h1>
+    <p class="lead"><%= result.total %> clientes ficticios. El listado muestra solo datos operativos; los datos sensibles requieren abrir el perfil.</p>
+  </div>
+  <a href="/customers/new" class="btn btn-cyan btn-sm"><i class="bi bi-person-plus me-1"></i>Nuevo cliente</a>
+</div>
+
+<div class="card mb-3">
+  <div class="card-body">
+    <form method="get" action="/customers" class="row g-2 align-items-end" role="search">
+      <div class="col-12 col-lg-4">
+        <label for="q" class="form-label small mb-1">Buscar</label>
+        <div class="input-group">
+          <span class="input-group-text"><i class="bi bi-search"></i></span>
+          <input id="q" name="q" class="form-control" value="<%= filters.q %>" placeholder="Nombre, código CUS-0001 o usuario">
+        </div>
+      </div>
+      <div class="col-12 col-md-4 col-lg-2">
+        <label for="country" class="form-label small mb-1">País</label>
+        <select id="country" name="country" class="form-select" data-autosubmit>
+          <option value="">Todos</option>
+          <% facets.countries.forEach(f => { %><option value="<%= f.country %>" <%= filters.country === f.country ? 'selected' : '' %>><%= f.country %> (<%= f.n %>)</option><% }) %>
+        </select>
+      </div>
+      <div class="col-12 col-md-4 col-lg-2">
+        <label for="city" class="form-label small mb-1">Ciudad</label>
+        <select id="city" name="city" class="form-select" data-autosubmit>
+          <option value="">Todas</option>
+          <% facets.cities.forEach(f => { %><option value="<%= f.city %>" <%= filters.city === f.city ? 'selected' : '' %>><%= f.city %> (<%= f.n %>)</option><% }) %>
+        </select>
+      </div>
+      <div class="col-12 col-md-4 col-lg-2">
+        <label for="status" class="form-label small mb-1">Estado</label>
+        <select id="status" name="status" class="form-select" data-autosubmit>
+          <option value="">Todos</option>
+          <% F.CUSTOMER_STATUSES.forEach(s => { %><option value="<%= s %>" <%= filters.status === s ? 'selected' : '' %>><%= F.STATUS_LABELS[s] %></option><% }) %>
+        </select>
+      </div>
+      <div class="col-12 col-lg-2 d-flex gap-2">
+        <input type="hidden" name="sort" value="<%= filters.sort %>"><input type="hidden" name="dir" value="<%= filters.dir %>">
+        <button class="btn btn-primary flex-fill" type="submit"><i class="bi bi-funnel me-1"></i>Filtrar</button>
+        <a class="btn btn-outline-secondary" href="/customers" title="Limpiar filtros" aria-label="Limpiar filtros"><i class="bi bi-x-lg"></i></a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body p-0">
+    <% if (!result.rows.length) { %>
+      <div class="empty-state"><i class="bi bi-person-x"></i><p class="mt-2 mb-1">No hay clientes que coincidan con los filtros.</p><a href="/customers" class="small">Limpiar filtros</a></div>
+    <% } else { %>
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead>
+          <tr>
+            <% const cols = [['code', 'Código'], ['name', 'Nombre'], ['city', 'Ciudad'], ['country', 'País'], ['status', 'Estado'], ['tier', 'Lealtad']]; %>
+            <% cols.forEach(([k, label]) => { const activeSort = filters.sort === k; const nextDir = activeSort && filters.dir === 'asc' ? 'desc' : 'asc'; %>
+              <th scope="col"><a class="sort-link" href="<%= qs({ sort: k, dir: nextDir, page: 1 }) %>"><%= label %> <% if (activeSort) { %><i class="bi bi-caret-<%= filters.dir === 'asc' ? 'up' : 'down' %>-fill"></i><% } %></a></th>
+            <% }) %>
+            <th scope="col" class="d-none d-xl-table-cell">KEK</th>
+            <th scope="col" class="text-end">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+        <% result.rows.forEach(r => { %>
+          <tr>
+            <td class="mono"><%= r.customer_code %></td>
+            <td><div class="fw-semibold"><%= r.full_name %></div><div class="small text-secondary"><%= r.username %></div></td>
+            <td><%= r.city %></td>
+            <td><%= r.country %></td>
+            <td><%- include('../partials/badges', { customerStatus: r.status }) %></td>
+            <td><%= r.loyalty_tier %></td>
+            <td class="d-none d-xl-table-cell mono small"><%= r.kek_id %></td>
+            <td class="text-end text-nowrap">
+              <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#preview-<%= r.id %>" aria-label="Vista previa de <%= r.full_name %>"><i class="bi bi-eye"></i></button>
+              <a class="btn btn-sm btn-primary" href="/customers/<%= r.id %>"><i class="bi bi-person-vcard me-1"></i>Perfil</a>
+            </td>
+          </tr>
+        <% }) %>
+        </tbody>
+      </table>
+    </div>
+    <% } %>
+  </div>
+  <div class="card-footer bg-white d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <span class="small text-secondary">Página <%= result.page %> de <%= result.pages %> (<%= result.total %> resultados)</span>
+    <%- include('../partials/pagination', { page: result.page, pages: result.pages }) %>
+  </div>
+</div>
+
+<% result.rows.forEach(r => { %>
+<div class="modal fade" id="preview-<%= r.id %>" tabindex="-1" aria-labelledby="preview-title-<%= r.id %>" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header"><h2 class="modal-title fs-5" id="preview-title-<%= r.id %>"><%= r.full_name %></h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
+      <div class="modal-body">
+        <div class="row g-2 small">
+          <div class="col-6"><div class="field-label">Código</div><div class="mono"><%= r.customer_code %></div></div>
+          <div class="col-6"><div class="field-label">Apodo</div><div><%= r.display_nickname %></div></div>
+          <div class="col-6"><div class="field-label">Ubicación</div><div><%= r.city %>, <%= r.country %></div></div>
+          <div class="col-6"><div class="field-label">Idioma</div><div><%= r.preferred_language %></div></div>
+          <div class="col-6"><div class="field-label">Habitación preferida</div><div><%= r.preferred_room_category %></div></div>
+          <div class="col-6"><div class="field-label">Reservaciones</div><div><%= r.reservations %></div></div>
+          <div class="col-12"><div class="field-label">Datos sensibles</div><div><i class="bi bi-lock-fill text-cyan me-1"></i>20 campos cifrados con DEK propio (<span class="mono"><%= r.kek_id %></span>)</div></div>
+        </div>
+      </div>
+      <div class="modal-footer"><a href="/customers/<%= r.id %>" class="btn btn-primary btn-sm">Abrir perfil completo</a></div>
+    </div>
+  </div>
+</div>
+<% }) %>
+<%- include('../partials/footer') %>

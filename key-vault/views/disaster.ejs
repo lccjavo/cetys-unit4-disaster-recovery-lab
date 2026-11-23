@@ -1,0 +1,63 @@
+<%- include('partials/header') %>
+<div class="page-header">
+  <h1>Simulacion de desastres</h1>
+  <p class="lead">Acciones controladas para el laboratorio. Afectan solo los recursos desechables del entorno local.</p>
+</div>
+<div class="row g-3">
+  <div class="col-12 col-md-6 col-xl-4">
+    <div class="card h-100 border-warning-subtle">
+      <div class="card-header"><i class="bi bi-lock me-1"></i>1. Acceso a llaves</div>
+      <div class="card-body">
+        <p>Estado: <span class="badge text-bg-<%= s.access_disabled ? 'warning' : 'success' %>"><%= s.access_disabled ? 'Deshabilitado' : 'Habilitado' %></span></p>
+        <p class="small text-secondary">Rechaza wrap/unwrap con <code>KEY_ACCESS_DISABLED</code>. Los KEK siguen existiendo.</p>
+        <form method="post" action="/disaster/access" id="accessForm">
+          <input type="hidden" name="_csrf" value="<%= csrf %>">
+          <input type="hidden" name="action" value="<%= s.access_disabled ? 'enable' : 'disable' %>">
+          <% if (s.access_disabled) { %>
+            <button class="btn btn-success" type="submit" data-loading-text="Aplicando..."><i class="bi bi-unlock me-1"></i>Restablecer acceso</button>
+          <% } else { %>
+            <button class="btn btn-warning" type="submit" data-confirm="Las operaciones de descifrado del hotel fallaran hasta restablecer el acceso." data-confirm-title="Deshabilitar acceso a llaves" data-confirm-variant="btn-warning"><i class="bi bi-lock me-1"></i>Deshabilitar acceso temporalmente</button>
+          <% } %>
+        </form>
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-md-6 col-xl-4">
+    <div class="card h-100 border-warning-subtle">
+      <div class="card-header"><i class="bi bi-plug me-1"></i>2. Servicio no disponible</div>
+      <div class="card-body">
+        <p>Estado: <span class="badge text-bg-<%= s.simulated_outage ? 'warning' : 'success' %>"><%= s.simulated_outage ? 'Interrupcion simulada' : 'En servicio' %></span></p>
+        <p class="small text-secondary">La API interna responde 503 a todo, incluso al chequeo de salud. Alternativa real: <code>docker compose stop key-vault</code>.</p>
+        <form method="post" action="/disaster/outage">
+          <input type="hidden" name="_csrf" value="<%= csrf %>">
+          <input type="hidden" name="action" value="<%= s.simulated_outage ? 'disable' : 'enable' %>">
+          <% if (s.simulated_outage) { %>
+            <button class="btn btn-success" type="submit" data-loading-text="Aplicando..."><i class="bi bi-plug-fill me-1"></i>Finalizar interrupcion</button>
+          <% } else { %>
+            <button class="btn btn-warning" type="submit" data-confirm="El hotel vera el Key Vault como no disponible hasta que finalice la interrupcion." data-confirm-title="Simular interrupcion" data-confirm-variant="btn-warning"><i class="bi bi-plug me-1"></i>Simular Key Vault no disponible</button>
+          <% } %>
+        </form>
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-xl-4">
+    <div class="card h-100 border-danger-subtle">
+      <div class="card-header text-danger"><i class="bi bi-exclamation-octagon me-1"></i>3. Perdida del almacenamiento de KEK</div>
+      <div class="card-body">
+        <p>Estado del almacen: <%- include('partials/statusbadge', { st: s.vault_status }) %></p>
+        <p class="small text-secondary">Mueve <code>keystore.json</code> a <code>/vault/keys/quarantine/</code> (no lo destruye). El hotel mostrara <code>KEK_NOT_FOUND</code>. Recupere con un respaldo independiente.</p>
+        <form method="post" action="/disaster/storage-loss" id="lossForm">
+          <input type="hidden" name="_csrf" value="<%= csrf %>">
+          <input type="hidden" name="confirm" value="">
+          <button class="btn btn-danger" type="submit" <%= s.vault_status !== 'READY' ? 'disabled' : '' %>
+            data-confirm="ACCION DESTRUCTIVA DE LABORATORIO: los datos cifrados quedaran ilegibles hasta restaurar un respaldo de KEK. Asegurese de tener un respaldo reciente (hay <%= backups.length %>)."
+            data-confirm-title="Simular perdida del keystore" data-confirm-word="PERDER-KEYSTORE"><i class="bi bi-trash3 me-1"></i>Simular perdida de KEKs</button>
+        </form>
+        <% if (s.vault_status === 'KEYSTORE_MISSING') { %>
+          <a href="/backups" class="btn btn-primary mt-2"><i class="bi bi-upload me-1"></i>Restaurar desde respaldo</a>
+        <% } %>
+      </div>
+    </div>
+  </div>
+</div>
+<%- include('partials/footer') %>

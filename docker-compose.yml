@@ -1,0 +1,164 @@
+# CETYS Unidad 4: Hotel Management + Key Vault + PostgreSQL 17 (HA y PITR).
+#
+# Perfil por defecto : postgres-primary, key-vault, hotel-app
+# Perfil lab1        : + postgres-standby  (replicacion fisica por streaming)
+# Perfil lab2        : + postgres-recovery (instancia de Point-in-Time Recovery)
+#
+# Todos los valores tienen un respaldo (${VAR:-defecto}) para que `docker compose build`
+# funcione sin .env. Para clase ejecute ./scripts/setup-env.sh y se generan secretos locales.
+# Todos los puertos se publican solo en 127.0.0.1.
+
+x-postgres-env: &postgres-env
+  POSTGRES_DB: ${POSTGRES_DB:-hotel_lab}
+  POSTGRES_USER: ${POSTGRES_USER:-hotel_admin}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lab_admin_default}
+  REPLICATION_USER: ${REPLICATION_USER:-replicator}
+  REPLICATION_PASSWORD: ${REPLICATION_PASSWORD:-lab_repl_default}
+  PGDATA: /var/lib/postgresql/data
+  TZ: UTC
+
+x-postgres-health: &postgres-health
+  test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\" -q"]
+  interval: 3s
+  timeout: 3s
+  retries: 40
+  start_period: 10s
+
+services:
+  postgres-primary:
+    build:
+      context: ./docker/postgres
+    image: cetys-dr/postgres:17
+    environment:
+      <<: *postgres-env
+      LAB_PG_ROLE: primary
+      LAB_CLUSTER_NAME: pg-primary
+    ports:
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5433}:5432"
+    volumes:
+      - pg-primary-data:/var/lib/postgresql/data
+      - pg-wal-archive:/wal-archive
+      - pg-backups:/backups
+      - lab-control:/lab-control
+    healthcheck: *postgres-health
+    shm_size: 256mb
+    stop_grace_period: 20s
+    restart: unless-stopped
+
+  postgres-standby:
+    profiles: ["lab1"]
+    build:
+      context: ./docker/postgres
+    image: cetys-dr/postgres:17
+    environment:
+      <<: *postgres-env
+      LAB_PG_ROLE: standby
+      LAB_CLUSTER_NAME: pg-standby
+      LAB_PRIMARY_HOST: postgres-primary
+    ports:
+      - "127.0.0.1:${POSTGRES_STANDBY_HOST_PORT:-5434}:5432"
+    volumes:
+      - pg-standby-data:/var/lib/postgresql/data
+      - pg-wal-archive:/wal-archive
+      - pg-backups:/backups
+      - lab-control:/lab-control
+    healthcheck: *postgres-health
+    shm_size: 256mb
+    stop_grace_period: 20s
+    restart: unless-stopped
+
+  postgres-recovery:
+    profiles: ["lab2"]
+    build:
+      context: ./docker/postgres
+    image: cetys-dr/postgres:17
+    environment:
+      <<: *postgres-env
+      LAB_PG_ROLE: recovery
+      LAB_CLUSTER_NAME: pg-recovery
+    ports:
+      - "127.0.0.1:${POSTGRES_RECOVERY_HOST_PORT:-5435}:5432"
+    volumes:
+      - pg-recovery-data:/var/lib/postgresql/data
+      - pg-wal-archive:/wal-archive:ro
+      - pg-backups:/backups:ro
+      - lab-control:/lab-control
+    healthcheck: *postgres-health
+    shm_size: 256mb
+    stop_grace_period: 20s
+    restart: "no"
+
+  key-vault:
+    build:
+      context: ./key-vault
+    image: cetys-dr/key-vault:1.0
+    environment:
+      VAULT_GUI_PORT: "3001"
+      VAULT_API_PORT: "8200"
+      VAULT_DATA_DIR: /vault/keys
+      VAULT_BACKUP_DIR: /vault/backups
+      KEY_VAULT_SERVICE_TOKEN: ${KEY_VAULT_SERVICE_TOKEN:-lab-default-service-token}
+      VAULT_SESSION_SECRET: ${VAULT_SESSION_SECRET:-lab-default-vault-session-secret}
+      VAULT_ADMIN_USER: ${VAULT_ADMIN_USER:-vault_admin}
+      VAULT_ADMIN_PASSWORD: ${VAULT_ADMIN_PASSWORD:-VaultAdmin2026!}
+      VAULT_BACKUP_PASSPHRASE: ${VAULT_BACKUP_PASSPHRASE:-lab-default-backup-passphrase}
+      LAB_MODE: ${LAB_MODE:-true}
+      NODE_ENV: ${NODE_ENV:-production}
+    # Solo se publica la GUI (3001) en localhost. La API criptografica (8200) queda
+    # dentro de la red de Docker y nunca se expone al equipo anfitrion.
+    ports:
+      - "127.0.0.1:${KEY_VAULT_APP_PORT:-3001}:3001"
+    expose:
+      - "8200"
+    volumes:
+      - vault-keys:/vault/keys
+      - vault-backups:/vault/backups
+    restart: unless-stopped
+
+  hotel-app:
+    build:
+      context: ./hotel-app
+    image: cetys-dr/hotel-app:1.0
+    depends_on:
+      postgres-primary:
+        condition: service_started
+      key-vault:
+        condition: service_healthy
+    environment:
+      HOTEL_APP_INTERNAL_PORT: "3000"
+      DB_HOST: ${DB_HOST:-postgres-primary}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_NAME: ${POSTGRES_DB:-hotel_lab}
+      DB_USER: ${DB_USER:-hotel_app}
+      DB_PASSWORD: ${DB_PASSWORD:-lab_app_default}
+      DB_ADMIN_USER: ${POSTGRES_USER:-hotel_admin}
+      DB_ADMIN_PASSWORD: ${POSTGRES_PASSWORD:-lab_admin_default}
+      DB_READER_USER: ${DB_READER_USER:-lab_reader}
+      DB_READER_PASSWORD: ${DB_READER_PASSWORD:-lab_reader_default}
+      DB_CANDIDATE_HOSTS: postgres-primary,postgres-standby,postgres-recovery
+      KEY_VAULT_URL: ${KEY_VAULT_URL:-http://key-vault:8200}
+      KEY_VAULT_SERVICE_TOKEN: ${KEY_VAULT_SERVICE_TOKEN:-lab-default-service-token}
+      HOTEL_SESSION_SECRET: ${HOTEL_SESSION_SECRET:-lab-default-hotel-session-secret}
+      HOTEL_DEMO_ADMIN_PASSWORD: ${HOTEL_DEMO_ADMIN_PASSWORD:-Admin2026!}
+      HOTEL_DEMO_STAFF_PASSWORD: ${HOTEL_DEMO_STAFF_PASSWORD:-Staff2026!}
+      HOTEL_DEMO_CUSTOMER_PASSWORD: ${HOTEL_DEMO_CUSTOMER_PASSWORD:-Cliente2026!}
+      AUTO_INIT: ${AUTO_INIT:-true}
+      LAB_MODE: ${LAB_MODE:-true}
+      NODE_ENV: ${NODE_ENV:-production}
+    ports:
+      - "127.0.0.1:${HOTEL_APP_PORT:-3000}:3000"
+    volumes:
+      - lab-control:/lab-control
+      - pg-backups:/backups:ro
+      - pg-wal-archive:/wal-archive:ro
+    restart: unless-stopped
+
+volumes:
+  pg-primary-data:
+  pg-standby-data:
+  pg-recovery-data:
+  pg-wal-archive:
+  pg-backups:
+  vault-keys:
+  vault-backups:
+  lab-control:
