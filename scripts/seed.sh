@@ -1,30 +1,30 @@
 #!/usr/bin/env bash
-# Inicializa el primer KEK (si el Key Vault nunca se inicializo) y genera los 150 clientes ficticios.
-# Idempotente: si la base ya fue inicializada, no cambia nada.
+# Initializes the first KEK (if the Key Vault was never initialized) and generates the 150 fictional customers.
+# Idempotent: if the database was already initialized, nothing changes.
 source "$(dirname "$0")/lib/common.sh"
 
 require_docker
 require_env_file
 
-service_running key-vault || fail "El Key Vault no esta corriendo. Ejecute: docker compose up -d postgres-primary key-vault"
+service_running key-vault || fail "The Key Vault is not running. Run: docker compose up -d postgres-primary key-vault"
 TARGET="$(current_target)"
-service_running "$TARGET" || fail "$TARGET no esta corriendo. Ejecute: docker compose up -d postgres-primary key-vault"
+service_running "$TARGET" || fail "$TARGET is not running. Run: docker compose up -d postgres-primary key-vault"
 
-info "Verificando PostgreSQL ($TARGET)..."
-wait_healthy "$TARGET" 120 || fail "PostgreSQL no esta listo."
-ok "PostgreSQL responde"
+info "Checking PostgreSQL ($TARGET)..."
+wait_healthy "$TARGET" 120 || fail "PostgreSQL is not ready."
+ok "PostgreSQL is responding"
 
-info "Verificando Key Vault..."
-wait_healthy key-vault 60 || fail "El Key Vault no esta listo. Diagnostico: docker compose logs key-vault"
-ok "Key Vault responde"
+info "Checking the Key Vault..."
+wait_healthy key-vault 60 || fail "The Key Vault is not ready. Diagnose with: docker compose logs key-vault"
+ok "Key Vault is responding"
 
 migrated="$(pg_sql "$TARGET" "SELECT count(*) FROM schema_migrations" 2>/dev/null || echo 0)"
-[ "${migrated:-0}" -ge 1 ] || fail "El esquema no existe. Ejecute primero: ./scripts/migrate.sh"
+[ "${migrated:-0}" -ge 1 ] || fail "The schema does not exist. Run first: ./scripts/migrate.sh"
 
-info "Ejecutando inicializacion de llaves y datos (puede tardar unos segundos)..."
+info "Initializing keys and data (this can take a few seconds)..."
 if dc run --rm --no-deps -T hotel-app node src/cli/seed.js; then
-  ok "Seed completado."
-  echo "    Siguiente paso: docker compose up -d"
+  ok "Seed completed."
+  echo "    Next step: docker compose up -d"
 else
-  fail "El seed fallo. Revise el mensaje anterior."
+  fail "The seed failed. Check the message above."
 fi

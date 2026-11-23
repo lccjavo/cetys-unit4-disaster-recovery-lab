@@ -1,20 +1,20 @@
 'use strict';
 
 /**
- * Autorizacion a nivel de objeto (prevencion de BOLA/IDOR).
- * Estas reglas se aplican en el BACKEND en cada solicitud; ocultar botones en la GUI
- * no es un control de seguridad.
+ * Object-level authorization (BOLA/IDOR prevention).
+ * These rules are enforced in the BACKEND on every request; hiding buttons in the GUI
+ * is not a security control.
  *
- *  admin    : todos los clientes; puede revelar los 20 campos (accion de demostracion auditada).
- *  staff    : todos los clientes (datos operativos y reservaciones); solo puede revelar
- *             los campos necesarios para la estancia (contacto, acompanantes, emergencia).
- *  customer : solo su propio perfil y sus propias reservaciones; puede revelar sus 20 campos.
+ *  admin    : all customers; may reveal all 20 fields (audited demonstration action).
+ *  staff    : all customers (operational data and reservations); may only reveal the
+ *             fields needed for the stay (contact, accompanying guests, emergency).
+ *  customer : only their own profile and reservations; may reveal their own 20 fields.
  */
 
 const { SENSITIVE_KEYS, STAFF_REVEALABLE } = require('./fields');
 
 class ForbiddenError extends Error {
-  constructor(message = 'No tiene autorizacion para acceder a este recurso.') {
+  constructor(message = 'You are not authorized to access this resource.') {
     super(message);
     this.code = 'FORBIDDEN';
     this.status = 403;

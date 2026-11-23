@@ -1,8 +1,8 @@
 #!/bin/bash
-# Punto de entrada comun para los tres roles de PostgreSQL del laboratorio.
-#   LAB_PG_ROLE=primary   -> servidor primario (inicializa la base la primera vez)
-#   LAB_PG_ROLE=standby   -> se clona del primario con pg_basebackup y replica por streaming
-#   LAB_PG_ROLE=recovery  -> instancia de PITR; sus datos los prepara scripts/restore.sh
+# Shared entrypoint for the three PostgreSQL roles in the lab.
+#   LAB_PG_ROLE=primary   -> primary server (initializes the database the first time)
+#   LAB_PG_ROLE=standby   -> cloned from the primary with pg_basebackup, streaming replication
+#   LAB_PG_ROLE=recovery  -> PITR instance; its data is prepared by scripts/restore.sh
 set -euo pipefail
 
 ROLE="${LAB_PG_ROLE:-primary}"
@@ -12,7 +12,7 @@ PRIMARY_HOST="${LAB_PRIMARY_HOST:-postgres-primary}"
 
 log() { echo "[lab-entrypoint:$ROLE] $*"; }
 
-# Permisos de los volumenes compartidos.
+# Permissions on the shared volumes.
 for d in /wal-archive /backups /backups/catalog; do
   if [ -d "$d" ] && [ -w "$d" ]; then
     chown postgres:postgres "$d" 2>/dev/null || true
@@ -26,49 +26,49 @@ if [ "${1:-postgres}" != "postgres" ]; then
 fi
 shift || true
 
-# Proteccion contra split brain: un primario "cercado" despues de una promocion no arranca.
+# Split-brain protection: a primary "fenced" after a promotion does not start.
 if [ "$ROLE" = "primary" ] && [ -f /lab-control/primary.fenced ]; then
   log "======================================================================"
-  log "ESTE NODO FUE CERCADO (fenced) DURANTE UNA CONMUTACION POR ERROR."
-  log "El standby fue promovido; arrancar este primario crearia split brain."
-  log "Para reconstruir el laboratorio ejecute: ./scripts/reset-lab.sh lab1"
-  log "Contenido del cerco:"
+  log "THIS NODE WAS FENCED DURING A FAILOVER."
+  log "The standby was promoted; starting this primary would cause split brain."
+  log "To rebuild the lab run: ./scripts/reset-lab.sh lab1"
+  log "Fence contents:"
   cat /lab-control/primary.fenced || true
   log "======================================================================"
   exec sleep infinity
 fi
 
 if [ "$ROLE" = "standby" ] && [ ! -s "$PGDATA/PG_VERSION" ]; then
-  log "Directorio de datos vacio: clonando desde $PRIMARY_HOST con pg_basebackup"
+  log "Empty data directory: cloning from $PRIMARY_HOST with pg_basebackup"
   mkdir -p "$PGDATA"
   chown postgres:postgres "$PGDATA"
   chmod 0700 "$PGDATA"
-  export PGPASSWORD="${REPLICATION_PASSWORD:?REPLICATION_PASSWORD requerido}"
+  export PGPASSWORD="${REPLICATION_PASSWORD:?REPLICATION_PASSWORD is required}"
   until pg_isready -h "$PRIMARY_HOST" -p 5432 -q; do
-    log "Esperando al primario $PRIMARY_HOST..."
+    log "Waiting for primary $PRIMARY_HOST..."
     sleep 2
   done
   if ! gosu postgres pg_basebackup -h "$PRIMARY_HOST" -p 5432 -U "${REPLICATION_USER:-replicator}" \
         -D "$PGDATA" -X stream -R -C -S standby_slot --checkpoint=fast; then
-    log "El slot standby_slot ya existe; reintentando sin crearlo"
+    log "Slot standby_slot already exists; retrying without creating it"
     find "$PGDATA" -mindepth 1 -delete
     gosu postgres pg_basebackup -h "$PRIMARY_HOST" -p 5432 -U "${REPLICATION_USER:-replicator}" \
         -D "$PGDATA" -X stream -R -S standby_slot --checkpoint=fast
   fi
   unset PGPASSWORD
-  log "Clonacion completa; standby.signal creado"
+  log "Clone complete; standby.signal created"
 fi
 
 if [ "$ROLE" = "recovery" ] && [ ! -s "$PGDATA/PG_VERSION" ]; then
-  log "No hay datos restaurados en este volumen."
-  log "Prepare la recuperacion con: ./scripts/restore.sh pitr --name <punto>"
+  log "There is no restored data in this volume."
+  log "Prepare the recovery with: ./scripts/restore.sh pitr --name <restore_point>"
   exec sleep infinity
 fi
 
 ARCHIVE_MODE=on
 if [ "$ROLE" = "recovery" ]; then
-  # La instancia de recuperacion no escribe en el archivo WAL compartido, para que
-  # la recuperacion sea repetible y no se mezclen lineas de tiempo.
+  # The recovery instance does not write to the shared WAL archive, so recovery
+  # stays repeatable and timelines are never mixed.
   ARCHIVE_MODE=off
 fi
 

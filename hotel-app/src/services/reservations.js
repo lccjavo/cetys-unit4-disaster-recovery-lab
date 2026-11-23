@@ -45,13 +45,13 @@ function validate(body) {
   const checkIn = String(body.check_in || '');
   const checkOut = String(body.check_out || '');
   const guests = Number.parseInt(body.guests_count, 10);
-  if (!ROOM_TYPES.includes(roomType)) errors.push('Seleccione un tipo de habitacion valido.');
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(checkIn) || Number.isNaN(Date.parse(checkIn))) errors.push('Fecha de llegada invalida.');
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(checkOut) || Number.isNaN(Date.parse(checkOut))) errors.push('Fecha de salida invalida.');
-  if (!errors.length && checkOut <= checkIn) errors.push('La salida debe ser posterior a la llegada.');
-  if (!(guests >= 1 && guests <= 8)) errors.push('El numero de huespedes debe estar entre 1 y 8.');
+  if (!ROOM_TYPES.includes(roomType)) errors.push('Select a valid room type.');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(checkIn) || Number.isNaN(Date.parse(checkIn))) errors.push('Invalid check-in date.');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(checkOut) || Number.isNaN(Date.parse(checkOut))) errors.push('Invalid check-out date.');
+  if (!errors.length && checkOut <= checkIn) errors.push('Check-out must be after check-in.');
+  if (!(guests >= 1 && guests <= 8)) errors.push('The number of guests must be between 1 and 8.');
   const nights = errors.length ? 0 : Math.round((Date.parse(checkOut) - Date.parse(checkIn)) / 86400000);
-  if (nights > 60) errors.push('La estancia maxima es de 60 noches.');
+  if (nights > 60) errors.push('The maximum stay is 60 nights.');
   return { errors, value: { roomType, checkIn, checkOut, guests, nights, total: nights * (ROOM_RATES[roomType] || 0) } };
 }
 

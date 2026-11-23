@@ -1,13 +1,13 @@
 'use strict';
 
 /**
- * Almacen de llaves del Key Vault educativo.
+ * Key store of the educational Key Vault.
  *
- * - keystore.json : material de los KEK (fuera de PostgreSQL, en el volumen vault-keys).
- * - state.json    : contadores, historial de rotacion, banderas de simulacion de desastre.
- * - /vault/backups: respaldos independientes del keystore, cifrados con una frase de paso.
+ * - keystore.json : KEK material (outside PostgreSQL, in the vault-keys volume).
+ * - state.json    : counters, rotation history, disaster simulation flags.
+ * - /vault/backups: independent keystore backups, encrypted with a passphrase.
  *
- * Esto es un KMS SIMULADO para clase. No es un HSM ni un KMS de nube.
+ * This is a SIMULATED KMS for class. It is not an HSM or a cloud KMS.
  */
 
 const fs = require('node:fs');
@@ -35,7 +35,7 @@ function stamp() {
 }
 
 function fingerprint(material) {
-  // Huella publica del KEK (SHA-256 truncado); no permite reconstruir la llave.
+  // Public KEK fingerprint (truncated SHA-256); it cannot be used to rebuild the key.
   return crypto.createHash('sha256').update(material).digest('hex').slice(0, 16);
 }
 
@@ -89,7 +89,7 @@ class VaultStore {
       : null;
   }
 
-  // ---------------------------------------------------------------- estado
+  // ----------------------------------------------------------------- status
 
   status() {
     if (this.keystore && this.keystore.keks && this.keystore.keks.length > 0) return 'READY';
@@ -137,7 +137,7 @@ class VaultStore {
     };
   }
 
-  // ---------------------------------------------------------- persistencia
+  // ------------------------------------------------------------ persistence
 
   saveKeystore() {
     writeJsonAtomic(this.keystoreFile, this.keystore);
@@ -158,7 +158,7 @@ class VaultStore {
       try {
         writeJsonAtomic(this.stateFile, this.state);
       } catch (err) {
-        console.error('[vault] no se pudo guardar state.json:', err.message);
+        console.error('[vault] could not save state.json:', err.message);
       }
     }, 500);
   }
@@ -170,12 +170,12 @@ class VaultStore {
     try {
       fs.appendFileSync(this.auditFile, `${JSON.stringify(entry)}\n`, { mode: 0o600 });
     } catch (err) {
-      console.error('[vault] no se pudo escribir audit.log:', err.message);
+      console.error('[vault] could not write audit.log:', err.message);
     }
     this.saveStateSoon();
   }
 
-  // ------------------------------------------------------- ciclo de vida KEK
+  // --------------------------------------------------------- KEK lifecycle
 
   newKek(version) {
     const material = crypto.randomBytes(32);
@@ -192,13 +192,13 @@ class VaultStore {
   initialize(actor) {
     const st = this.status();
     if (st === 'READY') {
-      throw new VaultError('ALREADY_INITIALIZED', 'El Key Vault ya tiene KEKs; no se generan llaves nuevas.', 409);
+      throw new VaultError('ALREADY_INITIALIZED', 'The Key Vault already has KEKs; no new keys are generated.', 409);
     }
     if (st === 'KEYSTORE_MISSING') {
       throw new VaultError(
         'KEYSTORE_MISSING',
-        'El Key Vault fue inicializado antes pero su almacenamiento de KEKs no esta. ' +
-          'No se generan llaves de reemplazo incompatibles: restaure desde un respaldo de KEK.',
+        'The Key Vault was initialized before but its KEK storage is missing. ' +
+          'No incompatible replacement keys are generated: restore from a KEK backup.',
         409,
       );
     }
@@ -231,7 +231,7 @@ class VaultStore {
     });
     this.saveStateNow();
     this.event('rotate', actor, 'success', { from: current && current.kek_id, to: kek.kek_id });
-    // Buena practica: respaldar inmediatamente despues de rotar.
+    // Good practice: back up immediately after rotating.
     const backup = this.createBackup(`auto-rotate-${kek.kek_id}`, 'system');
     return { kek_id: kek.kek_id, previous: current && current.kek_id, backup: backup.file };
   }
@@ -239,10 +239,10 @@ class VaultStore {
   requireReady() {
     const st = this.status();
     if (st === 'KEYSTORE_MISSING') {
-      throw new VaultError('KEK_NOT_FOUND', 'Almacenamiento de KEKs no disponible (keystore ausente).', 404);
+      throw new VaultError('KEK_NOT_FOUND', 'KEK storage unavailable (keystore missing).', 404);
     }
     if (st === 'UNINITIALIZED') {
-      throw new VaultError('NOT_INITIALIZED', 'El Key Vault no ha sido inicializado.', 409);
+      throw new VaultError('NOT_INITIALIZED', 'The Key Vault has not been initialized.', 409);
     }
   }
 
@@ -250,7 +250,7 @@ class VaultStore {
     if (this.state.access_disabled) {
       this.state.counters.denied += 1;
       this.saveStateSoon();
-      throw new VaultError('KEY_ACCESS_DISABLED', 'El acceso a las llaves esta deshabilitado temporalmente.', 403);
+      throw new VaultError('KEY_ACCESS_DISABLED', 'Key access is temporarily disabled.', 403);
     }
     this.requireReady();
     return actor;
@@ -264,7 +264,7 @@ class VaultStore {
 
   static validateContext(context) {
     if (typeof context !== 'string' || context.length < 3 || context.length > 256) {
-      throw new VaultError('BAD_REQUEST', 'context invalido', 400);
+      throw new VaultError('BAD_REQUEST', 'invalid context', 400);
     }
   }
 
@@ -297,7 +297,7 @@ class VaultStore {
     } catch {
       throw new VaultError(
         'UNWRAP_FAILED',
-        'La autenticacion GCM del DEK envuelto fallo (KEK incorrecto, contexto distinto o datos alterados).',
+        'GCM authentication of the wrapped DEK failed (wrong KEK, different context or tampered data).',
         422,
       );
     } finally {
@@ -314,7 +314,7 @@ class VaultStore {
     this.requireAccess(actor);
     VaultStore.validateContext(context);
     const dek = Buffer.from(String(dekB64 || ''), 'base64');
-    if (dek.length !== 32) throw new VaultError('BAD_REQUEST', 'El DEK debe medir 256 bits', 400);
+    if (dek.length !== 32) throw new VaultError('BAD_REQUEST', 'The DEK must be 256 bits', 400);
     const kek = this.activeKek();
     const result = this.wrapWith(kek, dek, context);
     dek.fill(0);
@@ -331,7 +331,7 @@ class VaultStore {
     if (!kek) {
       this.state.counters.errors += 1;
       this.saveStateSoon();
-      throw new VaultError('KEK_NOT_FOUND', `El KEK '${item.kek_id}' no existe en este Key Vault.`, 404);
+      throw new VaultError('KEK_NOT_FOUND', `KEK '${item.kek_id}' does not exist in this Key Vault.`, 404);
     }
     const dek = this.unwrapWith(kek, item);
     this.state.counters.unwrap += 1;
@@ -350,7 +350,7 @@ class VaultStore {
       try {
         VaultStore.validateContext(item.context);
         const kek = this.getKek(item.kek_id);
-        if (!kek) throw new VaultError('KEK_NOT_FOUND', `El KEK '${item.kek_id}' no existe.`, 404);
+        if (!kek) throw new VaultError('KEK_NOT_FOUND', `KEK '${item.kek_id}' does not exist.`, 404);
         const dek = this.unwrapWith(kek, item);
         const wrapped = this.wrapWith(active, dek, item.context);
         dek.fill(0);
@@ -370,7 +370,7 @@ class VaultStore {
     return { active_kek_id: active.kek_id, results };
   }
 
-  // ------------------------------------------------------------ respaldos
+  // ---------------------------------------------------------------- backups
 
   backupKey(salt) {
     return crypto.scryptSync(this.cfg.backupPassphrase, salt, 32, { N: 2 ** 15, r: 8, p: 1, maxmem: 64 * 1024 * 1024 });
@@ -424,17 +424,17 @@ class VaultStore {
           const size = fs.statSync(path.join(this.cfg.backupDir, file)).size;
           return { file, created_at: doc.created_at, reason: doc.reason, kek_ids: doc.kek_ids, active_kek_id: doc.active_kek_id, sha256: doc.keystore_sha256, size };
         } catch {
-          return { file, error: 'Archivo ilegible' };
+          return { file, error: 'Unreadable file' };
         }
       });
   }
 
   readBackup(file) {
     if (!/^kek-backup-[A-Za-z0-9TZ-]+\.json$/.test(file)) {
-      throw new VaultError('BAD_REQUEST', 'Nombre de respaldo invalido', 400);
+      throw new VaultError('BAD_REQUEST', 'Invalid backup name', 400);
     }
     const full = path.join(this.cfg.backupDir, file);
-    if (!fs.existsSync(full)) throw new VaultError('NOT_FOUND', 'El respaldo no existe', 404);
+    if (!fs.existsSync(full)) throw new VaultError('NOT_FOUND', 'The backup does not exist', 404);
     const doc = JSON.parse(fs.readFileSync(full, 'utf8'));
     let payload;
     try {
@@ -447,12 +447,12 @@ class VaultStore {
     } catch {
       throw new VaultError(
         'BACKUP_DECRYPT_FAILED',
-        'No se pudo descifrar el respaldo (VAULT_BACKUP_PASSPHRASE distinto o archivo alterado).',
+        'The backup could not be decrypted (different VAULT_BACKUP_PASSPHRASE or tampered file).',
         422,
       );
     }
     const sha = crypto.createHash('sha256').update(payload).digest('hex');
-    if (sha !== doc.keystore_sha256) throw new VaultError('BACKUP_CORRUPT', 'La suma SHA-256 del respaldo no coincide', 422);
+    if (sha !== doc.keystore_sha256) throw new VaultError('BACKUP_CORRUPT', 'The backup SHA-256 checksum does not match', 422);
     return JSON.parse(payload.toString('utf8'));
   }
 
@@ -470,7 +470,7 @@ class VaultStore {
           if (existing.key_material_b64 !== k.key_material_b64) {
             throw new VaultError(
               'KEK_CONFLICT',
-              `El KEK ${k.kek_id} del respaldo difiere del KEK actual con el mismo identificador. No se reemplaza.`,
+              `KEK ${k.kek_id} in the backup differs from the current KEK with the same identifier. It is not replaced.`,
               409,
             );
           }
@@ -491,7 +491,7 @@ class VaultStore {
     return { file, added, unchanged, active_kek_id: this.keystore.active_kek_id };
   }
 
-  // ------------------------------------------------- simulacion de desastres
+  // ---------------------------------------------------- disaster simulation
 
   setAccessDisabled(disabled, actor) {
     this.state.access_disabled = Boolean(disabled);
@@ -509,7 +509,7 @@ class VaultStore {
     this.requireReady();
     fs.mkdirSync(this.quarantineDir, { recursive: true, mode: 0o700 });
     const dest = path.join(this.quarantineDir, `keystore-${stamp()}.json`);
-    // No se destruye: se mueve a cuarentena dentro del mismo volumen como red de seguridad.
+    // Not destroyed: moved to quarantine inside the same volume as a safety net.
     fs.renameSync(this.keystoreFile, dest);
     this.keystore = null;
     this.event('simulate-storage-loss', actor, 'success', { quarantined_as: path.basename(dest) });

@@ -1,14 +1,14 @@
 'use strict';
 
 /**
- * Inicializacion de llaves y datos ficticios (idempotente).
+ * Key and fictional data initialization (idempotent).
  *
- * - Se ejecuta UNA sola vez por base de datos: al terminar escribe lab_metadata.seed_completed_at.
- * - Nunca se ejecuta sobre una base que ya tenga clientes o la marca de seed
- *   (por ejemplo, una base restaurada con PITR).
- * - Solo pide al Key Vault crear el primer KEK si el Key Vault nunca fue inicializado.
- *   Si el Key Vault perdio sus KEKs, se detiene y lo reporta (no genera llaves incompatibles).
- * - Los campos sensibles se cifran en la aplicacion ANTES del INSERT.
+ * - Runs ONCE per database: when it finishes it writes lab_metadata.seed_completed_at.
+ * - It never runs on a database that already has customers or the seed marker
+ *   (for example, a database restored with PITR).
+ * - It only asks the Key Vault to create the first KEK if the Key Vault was never initialized.
+ *   If the Key Vault lost its KEKs, it stops and reports it (it never generates incompatible keys).
+ * - Sensitive fields are encrypted in the application BEFORE the INSERT.
  */
 
 const argon2 = require('argon2');
@@ -22,9 +22,9 @@ const { generateSeedData } = require('./data/generator');
 const ARGON2_OPTIONS = { type: argon2.argon2id, memoryCost: 19456, timeCost: 2, parallelism: 1 };
 
 const STAFF_ACCOUNTS = [
-  { username: 'admin@hotel-lab.test', role: 'admin', display_name: 'Administradora del Laboratorio', pw: 'adminPassword' },
-  { username: 'recepcion@hotel-lab.test', role: 'staff', display_name: 'Recepcion Turno Matutino', pw: 'staffPassword' },
-  { username: 'concierge@hotel-lab.test', role: 'staff', display_name: 'Concierge Turno Vespertino', pw: 'staffPassword' },
+  { username: 'admin@hotel-lab.test', role: 'admin', display_name: 'Lab Administrator', pw: 'adminPassword' },
+  { username: 'frontdesk@hotel-lab.test', role: 'staff', display_name: 'Front Desk (Morning Shift)', pw: 'staffPassword' },
+  { username: 'concierge@hotel-lab.test', role: 'staff', display_name: 'Concierge (Evening Shift)', pw: 'staffPassword' },
 ];
 
 function hashPassword(password) {
@@ -43,28 +43,28 @@ async function seedState() {
 
 async function ensureKek(log) {
   const health = await vault.health({ fresh: true });
-  if (!health.available) throw new Error(`Key Vault no disponible (${health.error}). Inicie el servicio key-vault.`);
+  if (!health.available) throw new Error(`Key Vault unavailable (${health.error}). Start the key-vault service.`);
   if (health.vault_status === 'READY') {
-    log(`[seed] Key Vault listo. Se conservan los KEK existentes; KEK activo: ${health.active_kek_id}`);
+    log(`[seed] Key Vault ready. Existing KEKs are preserved; active KEK: ${health.active_kek_id}`);
     return health.active_kek_id;
   }
   if (health.vault_status === 'KEYSTORE_MISSING') {
     throw new Error(
-      'El Key Vault fue inicializado antes pero no tiene KEKs (keystore ausente). ' +
-        'No se generan llaves de reemplazo. Restaure los KEK con ./scripts/restore.sh keys',
+      'The Key Vault was initialized before but has no KEKs (keystore missing). ' +
+        'No replacement keys are generated. Restore the KEKs with ./scripts/restore.sh keys',
     );
   }
   const init = await vault.initialize();
-  log(`[seed] Primer KEK creado en el Key Vault: ${init.kek_id} (respaldo automatico: ${init.backup})`);
+  log(`[seed] First KEK created in the Key Vault: ${init.kek_id} (automatic backup: ${init.backup})`);
   return init.kek_id;
 }
 
 async function insertCustomer(client, { userId, code, profile, isSeed }) {
   const { rows } = await client.query("SELECT nextval(pg_get_serial_sequence('customers', 'id')) AS id");
   const customerId = Number(rows[0].id);
-  // 1) Cifrado en la aplicacion (DEK nuevo + 20 campos) y envoltura del DEK en el Key Vault.
+  // 1) Encryption in the application (new DEK + 20 fields) and DEK wrapping in the Key Vault.
   const sealed = await sealProfile(customerId, profile.sensitive);
-  // 2) Solo entonces se escribe en PostgreSQL.
+  // 2) Only then is anything written to PostgreSQL.
   const cols = ['id', 'user_id', 'customer_code', 'full_name', 'status', ...OPERATIONAL_KEYS, 'is_seed'];
   const vals = [customerId, userId, code, profile.fullName, profile.status, ...OPERATIONAL_KEYS.map((k) => profile.operational[k]), isSeed];
   await client.query(
@@ -96,34 +96,34 @@ async function verifyDecryption(log) {
     try {
       const values = await openFields(Number(r.id), r, r.encrypted_fields, SENSITIVE_KEYS);
       if (Object.keys(values).length === SENSITIVE_KEYS.length) ok += 1;
-      else failures.push({ id: r.id, error: 'campos incompletos' });
+      else failures.push({ id: r.id, error: 'incomplete fields' });
     } catch (err) {
       failures.push({ id: r.id, error: err.code || err.message });
     }
   }
-  if (log) log(`[seed] Verificacion de descifrado: ${ok}/${rows.length} clientes con sus 20 campos legibles`);
+  if (log) log(`[seed] Decryption check: ${ok}/${rows.length} customers with all 20 fields readable`);
   return { total: rows.length, ok, failures };
 }
 
 async function runSeed({ log = console.log } = {}) {
-  // El candado de sesion vive en una conexion dedicada durante todo el seed.
+  // The session-level lock lives on one dedicated connection for the whole seed.
   const lockClient = await db.pool.connect();
   const lock = await lockClient.query('SELECT pg_try_advisory_lock(424202) AS ok');
   if (!lock.rows[0].ok) {
     lockClient.release();
-    throw new Error('Otro proceso esta ejecutando el seed en este momento. Intente de nuevo en unos segundos.');
+    throw new Error('Another process is running the seed right now. Try again in a few seconds.');
   }
   try {
     const before = await seedState();
     if (before.seededAt) {
-      log(`[seed] La base ya fue inicializada el ${before.seededAt}. No se regenera nada.`);
-      log(`[seed] Estado actual: ${before.users} usuarios, ${before.customers} clientes, ${before.reservations} reservaciones.`);
+      log(`[seed] The database was already initialized on ${before.seededAt}. Nothing is regenerated.`);
+      log(`[seed] Current state: ${before.users} users, ${before.customers} customers, ${before.reservations} reservations.`);
       return { skipped: true, ...before };
     }
     if (before.customers > 0 || before.users > 0) {
       throw new Error(
-        `La base contiene datos (${before.users} usuarios, ${before.customers} clientes) pero no tiene la marca de seed. ` +
-          'Por seguridad no se agregan datos ficticios encima. Revise la base o use ./scripts/reset-lab.sh all.',
+        `The database contains data (${before.users} users, ${before.customers} customers) but has no seed marker. ` +
+          'For safety, no fictional data is added on top. Check the database or use ./scripts/reset-lab.sh all.',
       );
     }
 
@@ -131,7 +131,7 @@ async function runSeed({ log = console.log } = {}) {
     const started = Date.now();
     const data = generateSeedData({ count: cfg.seed.customerCount, seed: cfg.seed.prngSeed, referenceDate: cfg.seed.referenceDate });
 
-    log('[seed] Calculando hashes Argon2id de las contrasenas de demostracion...');
+    log('[seed] Computing Argon2id hashes for the demo passwords...');
     const staffHashes = await Promise.all(STAFF_ACCOUNTS.map((a) => hashPassword(cfg.demo[a.pw])));
     const customerHashes = [];
     for (let i = 0; i < data.length; i += 10) {
@@ -162,7 +162,7 @@ async function runSeed({ log = console.log } = {}) {
             [`RES-${String(reservationSeq).padStart(5, '0')}`, customerId, r.room_type, r.room_number, r.check_in, r.check_out, r.guests_count, r.status, r.total_amount],
           );
         }
-        if ((i + 1) % 25 === 0) log(`[seed] ${i + 1}/${data.length} clientes cifrados e insertados`);
+        if ((i + 1) % 25 === 0) log(`[seed] ${i + 1}/${data.length} customers encrypted and inserted`);
       }
       await client.query(
         `INSERT INTO lab_metadata (key, value) VALUES ('seed_completed_at', now()::text), ('seed_version', '1'), ('seed_customer_count', $1)
@@ -178,19 +178,19 @@ async function runSeed({ log = console.log } = {}) {
 
     const after = await seedState();
     if (after.customers !== cfg.seed.customerCount) {
-      throw new Error(`Se esperaban ${cfg.seed.customerCount} clientes y hay ${after.customers}`);
+      throw new Error(`Expected ${cfg.seed.customerCount} customers but found ${after.customers}`);
     }
     const verification = await verifyDecryption(log);
     if (verification.ok !== verification.total) {
-      throw new Error(`Fallo la verificacion de descifrado en ${verification.total - verification.ok} clientes`);
+      throw new Error(`Decryption check failed for ${verification.total - verification.ok} customers`);
     }
     const seconds = ((Date.now() - started) / 1000).toFixed(1);
     log('[seed] ------------------------------------------------------------');
-    log(`[seed] Inicializacion completa en ${seconds} s`);
-    log(`[seed] Usuarios: ${after.users} (3 de personal + ${after.customers} clientes)`);
-    log(`[seed] Clientes con 20 campos cifrados: ${after.customers}`);
-    log(`[seed] DEKs envueltos: ${after.keys} (KEK: ${result.kekIds.join(', ') || activeKek})`);
-    log(`[seed] Reservaciones: ${after.reservations}`);
+    log(`[seed] Initialization completed in ${seconds} s`);
+    log(`[seed] Users: ${after.users} (3 staff + ${after.customers} customers)`);
+    log(`[seed] Customers with 20 encrypted fields: ${after.customers}`);
+    log(`[seed] Wrapped DEKs: ${after.keys} (KEK: ${result.kekIds.join(', ') || activeKek})`);
+    log(`[seed] Reservations: ${after.reservations}`);
     log('[seed] ------------------------------------------------------------');
     return { skipped: false, ...after, kekIds: result.kekIds, verification };
   } finally {

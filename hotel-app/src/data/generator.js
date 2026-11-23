@@ -1,23 +1,23 @@
 'use strict';
 
 /**
- * Generador de datos 100% FICTICIOS.
+ * 100% FICTIONAL data generator.
  *
- * - Telefonos con el segmento 555 (MX) o 555-01xx (NANP, reservado para ficcion).
- * - Correos en el dominio reservado .test (RFC 2606).
- * - Tarjetas: numeros de PRUEBA publicos de la industria; no sirven para pagar. Sin CVV.
- * - RFC con homoclave terminada en "LB" (laboratorio); no corresponde a personas reales.
- * - CLABE con codigo de banco 999 (inexistente) y digito verificador calculado.
- * - Pasaportes con prefijo LAB.
+ * - Phone numbers use the 555 segment (MX) or 555-01xx (NANP range reserved for fiction).
+ * - Emails use the reserved .test domain (RFC 2606).
+ * - Cards: public industry TEST numbers; they cannot be used for payments. No CVV.
+ * - RFC with a homoclave ending in "LB" (lab); it does not belong to real people.
+ * - CLABE with bank code 999 (non-existent) and a computed check digit.
+ * - Passports use the LAB prefix.
  *
- * Con la misma semilla produce exactamente los mismos perfiles (reproducible).
+ * The same seed always produces exactly the same profiles (reproducible).
  */
 
 const crypto = require('node:crypto');
 const { ROOM_TYPES, ROOM_RATES } = require('../fields');
 
 function makeRng(seedText) {
-  // mulberry32 sembrado con SHA-256 del texto.
+  // mulberry32 seeded with the SHA-256 of the text.
   let a = crypto.createHash('sha256').update(seedText).digest().readUInt32LE(0);
   const next = () => {
     a = (a + 0x6d2b79f5) | 0;
@@ -42,66 +42,66 @@ const INT_LAST = ['Johnson', 'Smith', 'Brown', 'Taylor', 'Wilson', 'Anderson', '
 const CHILD_NAMES = ['Mateo', 'Sofía', 'Emma', 'Leo', 'Valentina', 'Tomás', 'Lucía', 'Nico', 'Julia', 'Bruno', 'Isabel', 'Dante', 'Mila', 'Gael', 'Renata'];
 
 const CITIES = [
-  // [ciudad, pais, zona horaria, moneda, idioma, lada, cp-prefijo, peso]
-  ['Tijuana', 'México', 'America/Tijuana', 'MXN', 'Español', '664', '22', 14],
-  ['Mexicali', 'México', 'America/Tijuana', 'MXN', 'Español', '686', '21', 8],
-  ['Ensenada', 'México', 'America/Tijuana', 'MXN', 'Español', '646', '22', 6],
-  ['Ciudad de México', 'México', 'America/Mexico_City', 'MXN', 'Español', '55', '06', 10],
-  ['Guadalajara', 'México', 'America/Mexico_City', 'MXN', 'Español', '33', '44', 7],
-  ['Monterrey', 'México', 'America/Monterrey', 'MXN', 'Español', '81', '64', 7],
-  ['Hermosillo', 'México', 'America/Hermosillo', 'MXN', 'Español', '662', '83', 4],
-  ['Mérida', 'México', 'America/Merida', 'MXN', 'Español', '999', '97', 3],
-  ['Querétaro', 'México', 'America/Mexico_City', 'MXN', 'Español', '442', '76', 3],
-  ['La Paz', 'México', 'America/Mazatlan', 'MXN', 'Español', '612', '23', 2],
-  ['San Diego', 'Estados Unidos', 'America/Los_Angeles', 'USD', 'Inglés', '619', '92', 8],
-  ['Los Ángeles', 'Estados Unidos', 'America/Los_Angeles', 'USD', 'Inglés', '213', '90', 5],
-  ['Phoenix', 'Estados Unidos', 'America/Phoenix', 'USD', 'Inglés', '602', '85', 3],
-  ['Houston', 'Estados Unidos', 'America/Chicago', 'USD', 'Inglés', '713', '77', 2],
-  ['Vancouver', 'Canadá', 'America/Vancouver', 'CAD', 'Inglés', '604', 'V6', 2],
-  ['Madrid', 'España', 'Europe/Madrid', 'EUR', 'Español', '91', '28', 2],
-  ['Bogotá', 'Colombia', 'America/Bogota', 'COP', 'Español', '601', '11', 2],
-  ['Buenos Aires', 'Argentina', 'America/Argentina/Buenos_Aires', 'ARS', 'Español', '11', 'C1', 2],
-  ['Santiago', 'Chile', 'America/Santiago', 'CLP', 'Español', '2', '83', 1],
-  ['Lima', 'Perú', 'America/Lima', 'PEN', 'Español', '1', '15', 1],
-  ['São Paulo', 'Brasil', 'America/Sao_Paulo', 'BRL', 'Portugués', '11', '01', 2],
-  ['Berlín', 'Alemania', 'Europe/Berlin', 'EUR', 'Alemán', '30', '10', 1],
-  ['París', 'Francia', 'Europe/Paris', 'EUR', 'Francés', '1', '75', 1],
-  ['Tokio', 'Japón', 'Asia/Tokyo', 'JPY', 'Japonés', '3', '10', 1],
+  // [city, country, time zone, currency, language, area code, ZIP prefix, weight]
+  ['Tijuana', 'Mexico', 'America/Tijuana', 'MXN', 'Spanish', '664', '22', 14],
+  ['Mexicali', 'Mexico', 'America/Tijuana', 'MXN', 'Spanish', '686', '21', 8],
+  ['Ensenada', 'Mexico', 'America/Tijuana', 'MXN', 'Spanish', '646', '22', 6],
+  ['Mexico City', 'Mexico', 'America/Mexico_City', 'MXN', 'Spanish', '55', '06', 10],
+  ['Guadalajara', 'Mexico', 'America/Mexico_City', 'MXN', 'Spanish', '33', '44', 7],
+  ['Monterrey', 'Mexico', 'America/Monterrey', 'MXN', 'Spanish', '81', '64', 7],
+  ['Hermosillo', 'Mexico', 'America/Hermosillo', 'MXN', 'Spanish', '662', '83', 4],
+  ['Merida', 'Mexico', 'America/Merida', 'MXN', 'Spanish', '999', '97', 3],
+  ['Queretaro', 'Mexico', 'America/Mexico_City', 'MXN', 'Spanish', '442', '76', 3],
+  ['La Paz', 'Mexico', 'America/Mazatlan', 'MXN', 'Spanish', '612', '23', 2],
+  ['San Diego', 'United States', 'America/Los_Angeles', 'USD', 'English', '619', '92', 8],
+  ['Los Angeles', 'United States', 'America/Los_Angeles', 'USD', 'English', '213', '90', 5],
+  ['Phoenix', 'United States', 'America/Phoenix', 'USD', 'English', '602', '85', 3],
+  ['Houston', 'United States', 'America/Chicago', 'USD', 'English', '713', '77', 2],
+  ['Vancouver', 'Canada', 'America/Vancouver', 'CAD', 'English', '604', 'V6', 2],
+  ['Madrid', 'Spain', 'Europe/Madrid', 'EUR', 'Spanish', '91', '28', 2],
+  ['Bogota', 'Colombia', 'America/Bogota', 'COP', 'Spanish', '601', '11', 2],
+  ['Buenos Aires', 'Argentina', 'America/Argentina/Buenos_Aires', 'ARS', 'Spanish', '11', 'C1', 2],
+  ['Santiago', 'Chile', 'America/Santiago', 'CLP', 'Spanish', '2', '83', 1],
+  ['Lima', 'Peru', 'America/Lima', 'PEN', 'Spanish', '1', '15', 1],
+  ['Sao Paulo', 'Brazil', 'America/Sao_Paulo', 'BRL', 'Portuguese', '11', '01', 2],
+  ['Berlin', 'Germany', 'Europe/Berlin', 'EUR', 'German', '30', '10', 1],
+  ['Paris', 'France', 'Europe/Paris', 'EUR', 'French', '1', '75', 1],
+  ['Tokyo', 'Japan', 'Asia/Tokyo', 'JPY', 'Japanese', '3', '10', 1],
 ];
 const CITY_BAG = CITIES.flatMap((c) => Array(c[7]).fill(c));
 
-const STREETS = ['Calle Ficticia', 'Avenida del Laboratorio', 'Paseo de los Ejemplos', 'Calle Simulada', 'Boulevard de Prueba', 'Privada Demo', 'Calzada Imaginaria'];
-const NEIGHBORHOODS = ['Col. Laboratorio', 'Col. Datos Sintéticos', 'Fracc. Ejemplo', 'Col. Prueba Norte', 'Col. Demo Sur'];
+const STREETS = ['Fictional Street', 'Laboratory Avenue', 'Example Boulevard', 'Simulated Road', 'Test Drive', 'Demo Lane', 'Imaginary Way'];
+const NEIGHBORHOODS = ['Lab District', 'Synthetic Data Heights', 'Example Park', 'North Test', 'South Demo'];
 const COMPANIES = [
-  ['Pacífico Digital', 'Pacífico Digital Laboratorio, S.A. de C.V.'],
-  ['Logística Frontera Demo', 'Logística Frontera Demo, S. de R.L. de C.V.'],
-  ['Consultores Baja Ficticia', 'Consultores Baja Ficticia, S.C.'],
-  ['Manufacturas del Ejemplo', 'Manufacturas del Ejemplo, S.A.P.I. de C.V.'],
-  ['Turismo Simulado', 'Turismo Simulado Internacional, S.A. de C.V.'],
-  ['Software Nube Prueba', 'Software Nube Prueba, S.A. de C.V.'],
-  ['Agro Valle Imaginario', 'Agro Valle Imaginario, S.P.R. de R.L.'],
-  ['Clínica Bienestar Demo', 'Clínica Bienestar Demo, S.C.'],
+  ['Pacific Digital', 'Pacific Digital Lab, S.A. de C.V.'],
+  ['Frontier Logistics Demo', 'Frontier Logistics Demo, S. de R.L. de C.V.'],
+  ['Baja Fictional Consulting', 'Baja Fictional Consulting, S.C.'],
+  ['Example Manufacturing', 'Example Manufacturing, S.A.P.I. de C.V.'],
+  ['Simulated Tourism', 'Simulated Tourism International, S.A. de C.V.'],
+  ['Test Cloud Software', 'Test Cloud Software, S.A. de C.V.'],
+  ['Imaginary Valley Agro', 'Imaginary Valley Agro, S.P.R. de R.L.'],
+  ['Wellness Demo Clinic', 'Wellness Demo Clinic, S.C.'],
   ['Acme Test Corp', 'Acme Test Corporation (Fictitious) Inc.'],
-  ['Universidad Ficticia del Norte', 'Asociación Educativa Ficticia, A.C.'],
-  ['Trabajador independiente', 'Persona física con actividad empresarial (ficticia)'],
+  ['Fictional Northern University', 'Fictional Education Association, A.C.'],
+  ['Self-employed', 'Sole proprietor (fictional)'],
 ];
-// Numeros de tarjeta de PRUEBA publicados por procesadores de pago. No son credenciales reales.
+// TEST card numbers published by payment processors. They are not real credentials.
 const TEST_CARDS = ['4111 1111 1111 1111', '4242 4242 4242 4242', '4012 8888 8888 1881', '5555 5555 5555 4444', '5105 1051 0510 5100', '3782 822463 10005', '6011 1111 1111 1117'];
-const INCOME = ['Menos de MXN 150,000', 'MXN 150,000 a 300,000', 'MXN 300,000 a 600,000', 'MXN 600,000 a 1,200,000', 'Más de MXN 1,200,000'];
+const INCOME = ['Under MXN 150,000', 'MXN 150,000 to 300,000', 'MXN 300,000 to 600,000', 'MXN 600,000 to 1,200,000', 'Over MXN 1,200,000'];
 
 const OPS = {
-  rooms: ['Sencilla', 'Doble', 'Suite Junior', 'Suite Ejecutiva', 'Familiar'],
-  beds: ['Individual', 'Matrimonial', 'Queen', 'King', 'Dos camas'],
-  floors: ['Bajo', 'Medio', 'Alto', 'Sin preferencia'],
-  views: ['Mar', 'Ciudad', 'Jardín', 'Montaña', 'Sin preferencia'],
-  pillows: ['Pluma', 'Memory foam', 'Hipoalergénica', 'Firme', 'Suave'],
+  rooms: ['Single', 'Double', 'Junior Suite', 'Executive Suite', 'Family'],
+  beds: ['Single', 'Full', 'Queen', 'King', 'Two beds'],
+  floors: ['Low', 'Middle', 'High', 'No preference'],
+  views: ['Ocean', 'City', 'Garden', 'Mountain', 'No preference'],
+  pillows: ['Feather', 'Memory foam', 'Hypoallergenic', 'Firm', 'Soft'],
   checkin: ['13:00', '14:00', '15:00', '16:00', '18:00', '21:00'],
   checkout: ['08:00', '10:00', '11:00', '12:00'],
-  breakfast: ['Continental', 'Americano', 'Mexicano', 'Vegetariano', 'Vegano', 'Sin desayuno'],
-  wifi: ['Básico', 'Trabajo remoto', 'Streaming', 'No usa'],
-  tiers: ['Bronce', 'Bronce', 'Plata', 'Plata', 'Oro', 'Platino'],
-  channels: ['Correo', 'SMS', 'WhatsApp', 'Llamada', 'App del hotel'],
-  amenities: ['Alberca', 'Spa', 'Gimnasio', 'Restaurante', 'Bar', 'Centro de negocios', 'Club infantil'],
+  breakfast: ['Continental', 'American', 'Mexican', 'Vegetarian', 'Vegan', 'No breakfast'],
+  wifi: ['Basic', 'Remote work', 'Streaming', 'Not used'],
+  tiers: ['Bronze', 'Bronze', 'Silver', 'Silver', 'Gold', 'Platinum'],
+  channels: ['Email', 'SMS', 'WhatsApp', 'Phone call', 'Hotel app'],
+  amenities: ['Pool', 'Spa', 'Gym', 'Restaurant', 'Bar', 'Business center', 'Kids club'],
 };
 
 const ascii = (s) =>
@@ -119,12 +119,12 @@ function clabe(rng) {
 
 function phone(rng, city) {
   const [, country, , , , lada] = city;
-  if (country === 'Estados Unidos' || country === 'Canadá') return `+1 ${lada} 555 01${rng.digits(2)}`;
-  if (country === 'México') {
+  if (country === 'United States' || country === 'Canada') return `+1 ${lada} 555 01${rng.digits(2)}`;
+  if (country === 'Mexico') {
     const rest = 10 - lada.length - 3;
     return `+52 ${lada} 555 ${rng.digits(rest)}`;
   }
-  return `+00 ${lada} 555 ${rng.digits(4)} (ficticio)`;
+  return `+00 ${lada} 555 ${rng.digits(4)} (fictional)`;
 }
 
 function personName(rng) {
@@ -147,7 +147,7 @@ function rfcFor(first, last, dob, rng) {
 }
 
 function address(rng, city) {
-  return `${rng.pick(STREETS)} ${rng.int(10, 9899)}, ${rng.pick(NEIGHBORHOODS)}, ${city[0]}, ${city[1]}, CP ${city[6]}${rng.digits(3)}`;
+  return `${rng.pick(STREETS)} ${rng.int(10, 9899)}, ${rng.pick(NEIGHBORHOODS)}, ${city[0]}, ${city[1]}, ZIP ${city[6]}${rng.digits(3)}`;
 }
 
 function buildProfile(rng, index, overrides = {}) {
@@ -165,7 +165,7 @@ function buildProfile(rng, index, overrides = {}) {
     return `${g.first} ${g.last}`;
   });
   const childrenCount = rng.pick([0, 0, 0, 1, 2]);
-  const children = Array.from({ length: childrenCount }, () => `${rng.pick(CHILD_NAMES)} (${rng.int(2, 15)} años, ficticio)`);
+  const children = Array.from({ length: childrenCount }, () => `${rng.pick(CHILD_NAMES)} (${rng.int(2, 15)} years old, fictional)`);
   const emergency = personName(rng);
   const tier = rng.pick(OPS.tiers);
   const statusRoll = rng.next();
@@ -175,9 +175,9 @@ function buildProfile(rng, index, overrides = {}) {
 
   const sensitive = {
     phone_number: phone(rng, city),
-    personal_email: `${firstToken}.${lastToken}${String(index).padStart(3, '0')}@correo-ficticio.test`,
+    personal_email: `${firstToken}.${lastToken}${String(index).padStart(3, '0')}@fictional-mail.test`,
     home_address: address(rng, city),
-    billing_address: rng.chance(0.6) ? 'Igual al domicilio particular' : address(rng, city),
+    billing_address: rng.chance(0.6) ? 'Same as home address' : address(rng, city),
     date_of_birth: dob,
     tax_id_rfc: rfcFor(name.first, name.last, dob, rng),
     passport_number: `LAB${rng.digits(6)}`,
@@ -190,8 +190,8 @@ function buildProfile(rng, index, overrides = {}) {
     outstanding_balance: `MXN ${balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
     employer_name: company[0],
     company_legal_name: company[1],
-    room_guests: guests.length ? guests.join('; ') : 'Ninguno',
-    accompanying_children: children.length ? children.join('; ') : 'Ninguno',
+    room_guests: guests.length ? guests.join('; ') : 'None',
+    accompanying_children: children.length ? children.join('; ') : 'None',
     emergency_contact_name: `${emergency.first} ${emergency.last}`,
     emergency_contact_phone: phone(rng, city),
   };
@@ -216,7 +216,7 @@ function buildProfile(rng, index, overrides = {}) {
     newsletter_opt_in: rng.chance(0.4),
     loyalty_tier: tier,
     preferred_contact_channel: rng.pick(OPS.channels),
-    favorite_amenity: childrenCount ? 'Club infantil' : rng.pick(OPS.amenities),
+    favorite_amenity: childrenCount ? 'Kids club' : rng.pick(OPS.amenities),
   };
 
   return { fullName, status: overrides.status || status, sensitive, operational };
@@ -253,7 +253,7 @@ function buildReservations(rng, referenceDate, preferredRoom, count) {
   return out;
 }
 
-// Los tres primeros clientes son fijos para que la documentacion pueda referirse a ellos.
+// The first three customers are fixed so the documentation can refer to them.
 const FIXED = [
   { first: 'Ana Lucía', last: 'Martínez Ruiz', city: 'Tijuana', status: 'vip' },
   { first: 'Luis Fernando', last: 'Gómez Ortega', city: 'Mexicali', status: 'active' },
@@ -266,7 +266,7 @@ function generateSeedData({ count, seed, referenceDate }) {
   for (let i = 1; i <= count; i += 1) {
     const profile = buildProfile(rng, i, FIXED[i - 1] || {});
     profile.index = i;
-    profile.username = `cliente${String(i).padStart(3, '0')}@hotel-lab.test`;
+    profile.username = `customer${String(i).padStart(3, '0')}@hotel-lab.test`;
     profile.customerCode = `CUS-${String(i).padStart(4, '0')}`;
     profile.reservations = buildReservations(rng, referenceDate, profile.operational.preferred_room_category, rng.int(1, 3));
     customers.push(profile);

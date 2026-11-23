@@ -12,7 +12,7 @@ COPY public ./public
 COPY migrations ./migrations
 COPY test ./test
 
-# Puntos de montaje de volumenes compartidos (lectura de respaldos/WAL, control del laboratorio).
+# Mount points for shared volumes (read-only backups/WAL, lab control files).
 RUN mkdir -p /lab-control /backups/catalog /wal-archive \
     && chmod 1777 /lab-control \
     && chown 999:999 /backups /backups/catalog /wal-archive \

@@ -1,6 +1,6 @@
 'use strict';
 
-/** Middleware comun: sesiones, CSRF, autenticacion, mensajes flash y utilidades de vistas. */
+/** Shared middleware: sessions, CSRF, authentication, flash messages and view helpers. */
 
 const crypto = require('node:crypto');
 const session = require('express-session');
@@ -17,7 +17,7 @@ function safeEqual(a, b) {
 }
 
 function sessionMiddleware() {
-  // Sesiones en memoria: sobreviven a caidas de PostgreSQL (la GUI sigue informando durante el desastre).
+  // In-memory sessions: they survive PostgreSQL outages (the GUI keeps reporting during the disaster).
   return session({
     name: 'hotel.sid',
     secret: cfg.sessionSecret,
@@ -29,14 +29,14 @@ function sessionMiddleware() {
 }
 
 function fmtDate(value, withTime = true) {
-  if (!value) return 'N/D';
+  if (!value) return 'N/A';
   const d = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(d.getTime())) return String(value);
-  return d.toLocaleString('es-MX', withTime ? { timeZone: 'America/Tijuana', hour12: false } : { timeZone: 'UTC', dateStyle: 'medium' });
+  return d.toLocaleString('en-US', withTime ? { timeZone: 'America/Tijuana', hour12: false } : { timeZone: 'UTC', dateStyle: 'medium' });
 }
 
 function money(n) {
-  return Number(n || 0).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
+  return Number(n || 0).toLocaleString('en-US', { style: 'currency', currency: 'MXN' });
 }
 
 function locals(req, res, next) {
@@ -65,8 +65,8 @@ function csrfCheck(req, res, next) {
   if (req.method !== 'POST') return next();
   const sent = (req.body && req.body._csrf) || req.get('x-csrf-token') || '';
   if (!safeEqual(sent, req.session.csrf || '')) {
-    if (req.is('application/json')) return res.status(403).json({ error: 'CSRF', message: 'Token CSRF invalido. Recargue la pagina.' });
-    return res.status(403).render('error', { title: 'Solicitud rechazada', message: 'Token CSRF invalido. Recargue la pagina e intente de nuevo.', code: 'CSRF' });
+    if (req.is('application/json')) return res.status(403).json({ error: 'CSRF', message: 'Invalid CSRF token. Reload the page.' });
+    return res.status(403).render('error', { title: 'Request rejected', message: 'Invalid CSRF token. Reload the page and try again.', code: 'CSRF' });
   }
   return next();
 }
@@ -77,7 +77,7 @@ function flash(req, type, message) {
 
 function requireAuth(req, res, next) {
   if (!req.session.user) {
-    if (req.is('application/json') || req.path.startsWith('/api/')) return res.status(401).json({ error: 'UNAUTHENTICATED', message: 'Inicie sesion.' });
+    if (req.is('application/json') || req.path.startsWith('/api/')) return res.status(401).json({ error: 'UNAUTHENTICATED', message: 'Please sign in.' });
     return res.redirect(`/login?next=${encodeURIComponent(req.originalUrl)}`);
   }
   return next();
@@ -86,7 +86,7 @@ function requireAuth(req, res, next) {
 function requireRole(...roles) {
   return (req, res, next) => {
     if (!req.session.user || !roles.includes(req.session.user.role)) {
-      const err = new Error('Su rol no tiene acceso a esta seccion.');
+      const err = new Error('Your role does not have access to this section.');
       err.status = 403;
       err.code = 'FORBIDDEN';
       return next(err);

@@ -1,39 +1,39 @@
 #!/usr/bin/env bash
-# Simula un borrado accidental de clientes en el entorno DESECHABLE del laboratorio.
-# Uso: ./scripts/lab2-simulate-deletion.sh [--yes] [--country "México"]
+# Simulates an accidental deletion of customers in the DISPOSABLE lab environment.
+# Usage: ./scripts/lab2-simulate-deletion.sh [--yes] [--country "Mexico"]
 source "$(dirname "$0")/lib/common.sh"
 
 require_docker
-COUNTRY="México"
+COUNTRY="Mexico"
 while [ $# -gt 0 ]; do
   case "$1" in
     --yes) ASSUME_YES=true; shift ;;
     --country) COUNTRY="$2"; shift 2 ;;
-    *) fail "Opcion desconocida: $1" ;;
+    *) fail "Unknown option: $1" ;;
   esac
 done
-case "$COUNTRY" in *"'"*|*"\\"*|"") fail "Pais invalido" ;; esac
+case "$COUNTRY" in *"'"*|*"\\"*|"") fail "Invalid country" ;; esac
 
-PRIMARY="$(current_primary)" || fail "No hay un primario escribible en ejecucion."
+PRIMARY="$(current_primary)" || fail "No writable primary is running."
 n="$(pg_sql "$PRIMARY" "SELECT count(*) FROM customers WHERE country = '$COUNTRY'")"
-[ "$n" -gt 0 ] || fail "No hay clientes de '$COUNTRY' en $PRIMARY: el borrado ya se simulo. Para repetir el laboratorio use ./scripts/reset-lab.sh all"
+[ "$n" -gt 0 ] || fail "There are no customers from '$COUNTRY' on $PRIMARY: the deletion was already simulated. To repeat the lab use ./scripts/reset-lab.sh all"
 
 cat <<MSG
 
-Escenario: un operador queria borrar UN cliente de prueba con
+Scenario: an operator wanted to delete ONE test customer with
     DELETE FROM users WHERE id = (SELECT user_id FROM customers WHERE customer_code = 'CUS-0151');
-pero ejecuto por error una condicion incompleta:
+but by mistake ran an incomplete condition:
     DELETE FROM users WHERE id IN (SELECT user_id FROM customers WHERE country = '$COUNTRY');
 
-Servidor: $PRIMARY   Clientes afectados: $n (con sus datos cifrados, llaves envueltas y reservaciones)
+Server: $PRIMARY   Affected customers: $n (with their encrypted data, wrapped keys and reservations)
 MSG
-confirm "Este borrado es real en la base del laboratorio." BORRAR
+confirm "This deletion is real in the lab database." DELETE
 
-before="$(pg_sql "$PRIMARY" "SELECT count(*) || ' clientes / ' || (SELECT count(*) FROM reservations) || ' reservaciones' FROM customers")"
+before="$(pg_sql "$PRIMARY" "SELECT count(*) || ' customers / ' || (SELECT count(*) FROM reservations) || ' reservations' FROM customers")"
 AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-pg_sql "$PRIMARY" "INSERT INTO audit_events (actor_username, action, target_type, outcome, details) VALUES ('operador-lab', 'lab.simulated_deletion', 'customers', 'success', jsonb_build_object('country', '$COUNTRY', 'customers', $n)); DELETE FROM users WHERE id IN (SELECT user_id FROM customers WHERE country = '$COUNTRY');" >/dev/null
-after="$(pg_sql "$PRIMARY" "SELECT count(*) || ' clientes / ' || (SELECT count(*) FROM reservations) || ' reservaciones' FROM customers")"
-ok "Borrado simulado a las $AT"
-echo "    Antes:   $before"
-echo "    Despues: $after"
-echo "    Observe la perdida en http://localhost:${HOTEL_APP_PORT}/customers y recupere con ./scripts/restore.sh pitr"
+pg_sql "$PRIMARY" "INSERT INTO audit_events (actor_username, action, target_type, outcome, details) VALUES ('lab-operator', 'lab.simulated_deletion', 'customers', 'success', jsonb_build_object('country', '$COUNTRY', 'customers', $n)); DELETE FROM users WHERE id IN (SELECT user_id FROM customers WHERE country = '$COUNTRY');" >/dev/null
+after="$(pg_sql "$PRIMARY" "SELECT count(*) || ' customers / ' || (SELECT count(*) FROM reservations) || ' reservations' FROM customers")"
+ok "Deletion simulated at $AT"
+echo "    Before: $before"
+echo "    After:  $after"
+echo "    See the loss at http://localhost:${HOTEL_APP_PORT}/customers and recover with ./scripts/restore.sh pitr"

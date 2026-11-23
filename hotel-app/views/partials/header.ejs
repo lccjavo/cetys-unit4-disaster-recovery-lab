@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="es">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -13,8 +13,8 @@
 <% if (user) { %>
 <nav class="navbar navbar-expand-lg navbar-dark navbar-lab sticky-top">
   <div class="container-fluid">
-    <a class="navbar-brand" href="/"><i class="bi bi-building me-2"></i>Hotel Lab <span class="d-none d-sm-inline fw-normal small opacity-75">Gestión hotelera</span></a>
-    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false" aria-label="Mostrar navegación">
+    <a class="navbar-brand" href="/"><i class="bi bi-building me-2"></i>Hotel Lab <span class="d-none d-sm-inline fw-normal small opacity-75">Hotel management</span></a>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false" aria-label="Toggle navigation">
       <span class="navbar-toggler-icon"></span>
     </button>
     <div class="collapse navbar-collapse" id="mainNav">
@@ -22,10 +22,10 @@
         <%
           const nav = [];
           if (user.role === 'customer') {
-            nav.push(['/', 'house', 'Mi cuenta'], [`/customers/${user.customer_id}`, 'person-vcard', 'Mi perfil'], ['/reservations', 'calendar-check', 'Mis reservaciones']);
+            nav.push(['/', 'house', 'My account'], [`/customers/${user.customer_id}`, 'person-vcard', 'My profile'], ['/reservations', 'calendar-check', 'My reservations']);
           } else {
-            nav.push(['/', 'speedometer2', 'Panel'], ['/customers', 'people', 'Clientes'], ['/reservations', 'calendar-check', 'Reservaciones']);
-            if (user.role === 'admin') nav.push(['/security', 'shield-lock', 'Seguridad y cifrado'], ['/dr', 'life-preserver', 'Recuperación'], ['/accounts', 'person-gear', 'Cuentas']);
+            nav.push(['/', 'speedometer2', 'Dashboard'], ['/customers', 'people', 'Customers'], ['/reservations', 'calendar-check', 'Reservations']);
+            if (user.role === 'admin') nav.push(['/security', 'shield-lock', 'Security and encryption'], ['/dr', 'life-preserver', 'Recovery'], ['/accounts', 'person-gear', 'Accounts']);
           }
         %>
         <% nav.forEach(([href, icon, label]) => { const active = href === '/' ? path === '/' : path.startsWith(href); %>
@@ -33,12 +33,12 @@
         <% }) %>
       </ul>
       <div class="d-flex flex-wrap align-items-center gap-2">
-        <span class="badge rounded-pill text-bg-light" title="Servidor PostgreSQL actual"><span class="status-dot <%= dbHealth.status === 'up' ? 'ok' : dbHealth.status === 'down' ? 'down' : 'off' %>"></span>BD: <%= dbHealth.target %></span>
+        <span class="badge rounded-pill text-bg-light" title="Current PostgreSQL server"><span class="status-dot <%= dbHealth.status === 'up' ? 'ok' : dbHealth.status === 'down' ? 'down' : 'off' %>"></span>BD: <%= dbHealth.target %></span>
         <span class="badge rounded-pill text-bg-light" title="Key Vault"><span class="status-dot <%= vaultHealth.available && !vaultHealth.access_disabled && vaultHealth.vault_status === 'READY' ? 'ok' : 'down' %>"></span>Key Vault</span>
         <form method="post" action="/logout" class="d-flex align-items-center">
           <input type="hidden" name="_csrf" value="<%= csrf %>">
-          <span class="navbar-text text-white-50 small me-2 d-none d-xl-inline"><i class="bi bi-person-circle me-1"></i><%= user.display_name %> <span class="badge bg-info-subtle text-info-emphasis"><%= { admin: 'Administrador', staff: 'Personal', customer: 'Cliente' }[user.role] %></span></span>
-          <button class="btn btn-sm btn-outline-light" type="submit"><i class="bi bi-box-arrow-right me-1"></i>Salir</button>
+          <span class="navbar-text text-white-50 small me-2 d-none d-xl-inline"><i class="bi bi-person-circle me-1"></i><%= user.display_name %> <span class="badge bg-info-subtle text-info-emphasis"><%= { admin: 'Administrator', staff: 'Staff', customer: 'Customer' }[user.role] %></span></span>
+          <button class="btn btn-sm btn-outline-light" type="submit"><i class="bi bi-box-arrow-right me-1"></i>Sign out</button>
         </form>
       </div>
     </div>
@@ -48,25 +48,25 @@
   <% if (dbHealth.status === 'down') { %>
     <div class="alert alert-danger d-flex gap-2 mt-3 mb-0" role="alert">
       <i class="bi bi-database-x fs-5"></i>
-      <div><strong>Base de datos no disponible.</strong> Sin conexión con <code><%= dbHealth.target %></code> desde <%= fmtDate(dbHealth.downSince) %>. La aplicación sigue en línea; se reconectará al restablecerse el servidor o al promover el standby.<% if (user.role === 'admin') { %> <a class="alert-link" href="/dr">Ver recuperación</a><% } %></div>
+      <div><strong>Database unavailable.</strong> No connection to <code><%= dbHealth.target %></code> since <%= fmtDate(dbHealth.downSince) %>. The application stays online and will reconnect when the server comes back or the standby is promoted.<% if (user.role === 'admin') { %> <a class="alert-link" href="/dr">Open Recovery</a><% } %></div>
     </div>
   <% } else if (dbHealth.server && dbHealth.server.in_recovery) { %>
-    <div class="alert alert-warning mt-3 mb-0"><i class="bi bi-eye me-1"></i>El servidor actual <code><%= dbHealth.target %></code> está en modo standby (solo lectura).</div>
+    <div class="alert alert-warning mt-3 mb-0"><i class="bi bi-eye me-1"></i>The current server <code><%= dbHealth.target %></code> is in standby mode (read-only).</div>
   <% } %>
   <% if (!vaultHealth.available) { %>
     <div class="alert alert-warning d-flex gap-2 mt-3 mb-0" role="alert">
       <i class="bi bi-safe fs-5"></i>
-      <div><strong>Key Vault no disponible.</strong> Los datos operativos se muestran normalmente; los campos cifrados no se pueden leer temporalmente. <span class="small text-secondary">(<%= vaultHealth.error %>)</span></div>
+      <div><strong>Key Vault unavailable.</strong> Operational data is shown normally; encrypted fields are temporarily unreadable. <span class="small text-secondary">(<%= vaultHealth.error %>)</span></div>
     </div>
   <% } else if (vaultHealth.access_disabled) { %>
-    <div class="alert alert-warning mt-3 mb-0"><i class="bi bi-lock me-1"></i><strong>Acceso a llaves deshabilitado</strong> en el Key Vault: el descifrado está bloqueado.</div>
+    <div class="alert alert-warning mt-3 mb-0"><i class="bi bi-lock me-1"></i><strong>Key access disabled</strong> in the Key Vault: decryption is blocked.</div>
   <% } else if (vaultHealth.vault_status === 'KEYSTORE_MISSING') { %>
-    <div class="alert alert-danger mt-3 mb-0"><i class="bi bi-key me-1"></i><strong>KEK no encontrado:</strong> el Key Vault perdió su almacenamiento de llaves. Los datos cifrados se conservan, pero no se pueden descifrar hasta restaurar el KEK desde su respaldo.</div>
+    <div class="alert alert-danger mt-3 mb-0"><i class="bi bi-key me-1"></i><strong>KEK not found:</strong> the Key Vault lost its key storage. The encrypted data is preserved but cannot be decrypted until the KEK is restored from its backup.</div>
   <% } %>
   <% if (flash) { %>
     <div class="alert alert-<%= flash.type %> alert-dismissible fade show mt-3 mb-0" role="alert">
       <%= flash.message %>
-      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
+      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
     </div>
   <% } %>
 <% } %>

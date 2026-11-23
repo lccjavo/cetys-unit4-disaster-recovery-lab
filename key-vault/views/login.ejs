@@ -4,25 +4,25 @@
     <div class="card-body p-4 p-md-5">
       <div class="text-center mb-4">
         <div class="stat-card"><span class="stat-icon mb-2"><i class="bi bi-safe2"></i></span></div>
-        <h1 class="h4 mb-1">Key Vault de Laboratorio</h1>
-        <p class="text-secondary small mb-0">Administracion de KEKs (cuenta independiente del hotel)</p>
+        <h1 class="h4 mb-1">Lab Key Vault</h1>
+        <p class="text-secondary small mb-0">KEK administration (account separate from the hotel)</p>
       </div>
       <% if (error) { %><div class="alert alert-danger py-2 small" role="alert"><%= error %></div><% } %>
       <form method="post" action="/login" class="needs-validation" novalidate>
         <input type="hidden" name="_csrf" value="<%= csrf %>">
         <div class="mb-3">
-          <label for="username" class="form-label">Usuario administrador</label>
+          <label for="username" class="form-label">Administrator username</label>
           <input id="username" name="username" class="form-control" required autocomplete="username" value="<%= username %>">
-          <div class="invalid-feedback">Capture el usuario.</div>
+          <div class="invalid-feedback">Enter the username.</div>
         </div>
         <div class="mb-4">
-          <label for="password" class="form-label">Contrasena</label>
+          <label for="password" class="form-label">Password</label>
           <input id="password" name="password" type="password" class="form-control" required autocomplete="current-password">
-          <div class="invalid-feedback">Capture la contrasena.</div>
+          <div class="invalid-feedback">Enter the password.</div>
         </div>
-        <button class="btn btn-primary w-100" type="submit" data-loading-text="Verificando..."><i class="bi bi-box-arrow-in-right me-1"></i>Entrar</button>
+        <button class="btn btn-primary w-100" type="submit" data-loading-text="Verifying..."><i class="bi bi-box-arrow-in-right me-1"></i>Sign in</button>
       </form>
-      <p class="small text-secondary mt-4 mb-0">Entorno educativo. Las credenciales de demostracion estan en el README del instructor.</p>
+      <p class="small text-secondary mt-4 mb-0">Educational environment. The demo credentials are listed in the README.</p>
     </div>
   </div>
 </div>

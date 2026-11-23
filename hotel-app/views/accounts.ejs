@@ -1,30 +1,30 @@
 <%- include('partials/header') %>
 <div class="page-header">
-  <h1>Cuentas de usuario</h1>
-  <p class="lead"><%= total %> cuentas. <% byRole.forEach(r => { %><span class="badge text-bg-light border me-1"><%= { admin: 'Administradores', staff: 'Personal', customer: 'Clientes' }[r.role] %>: <%= r.n %></span><% }) %></p>
+  <h1>User accounts</h1>
+  <p class="lead"><%= total %> accounts. <% byRole.forEach(r => { %><span class="badge text-bg-light border me-1"><%= { admin: 'Administrators', staff: 'Staff', customer: 'Customers' }[r.role] %>: <%= r.n %></span><% }) %></p>
 </div>
 <div class="card mb-3"><div class="card-body">
   <form method="get" class="row g-2 align-items-end" role="search">
-    <div class="col-12 col-md-6 col-lg-4"><label for="q" class="form-label small mb-1">Buscar</label><input id="q" class="form-control" name="q" value="<%= filters.q %>" placeholder="Usuario o nombre"></div>
-    <div class="col-12 col-md-4 col-lg-3"><label for="role" class="form-label small mb-1">Rol</label>
-      <select id="role" class="form-select" name="role" data-autosubmit><option value="">Todos</option><option value="admin" <%= filters.role === 'admin' ? 'selected' : '' %>>Administrador</option><option value="staff" <%= filters.role === 'staff' ? 'selected' : '' %>>Personal</option><option value="customer" <%= filters.role === 'customer' ? 'selected' : '' %>>Cliente</option></select></div>
-    <div class="col-12 col-md-2"><button class="btn btn-primary w-100" type="submit">Filtrar</button></div>
+    <div class="col-12 col-md-6 col-lg-4"><label for="q" class="form-label small mb-1">Search</label><input id="q" class="form-control" name="q" value="<%= filters.q %>" placeholder="Username or name"></div>
+    <div class="col-12 col-md-4 col-lg-3"><label for="role" class="form-label small mb-1">Role</label>
+      <select id="role" class="form-select" name="role" data-autosubmit><option value="">All</option><option value="admin" <%= filters.role === 'admin' ? 'selected' : '' %>>Administrator</option><option value="staff" <%= filters.role === 'staff' ? 'selected' : '' %>>Staff</option><option value="customer" <%= filters.role === 'customer' ? 'selected' : '' %>>Customer</option></select></div>
+    <div class="col-12 col-md-2"><button class="btn btn-primary w-100" type="submit">Filter</button></div>
   </form>
 </div></div>
 <div class="card">
   <div class="card-body p-0">
-    <% if (!rows.length) { %><div class="empty-state"><i class="bi bi-person-x"></i><p class="mt-2 mb-0">Sin resultados.</p></div><% } else { %>
+    <% if (!rows.length) { %><div class="empty-state"><i class="bi bi-person-x"></i><p class="mt-2 mb-0">No results.</p></div><% } else { %>
     <div class="table-responsive"><table class="table table-hover align-middle mb-0">
-      <thead><tr><th>ID</th><th>Usuario</th><th>Nombre</th><th>Rol</th><th>Cliente</th><th>Hash (prefijo)</th><th>Último acceso</th></tr></thead>
+      <thead><tr><th>ID</th><th>Username</th><th>Name</th><th>Role</th><th>Customer</th><th>Hash (prefix)</th><th>Last sign-in</th></tr></thead>
       <tbody><% rows.forEach(u => { %>
         <tr><td><%= u.id %></td><td class="mono small"><%= u.username %></td><td><%= u.display_name %></td>
         <td><span class="badge text-bg-<%= u.role === 'admin' ? 'dark' : u.role === 'staff' ? 'info' : 'light border' %>"><%= u.role %></span></td>
         <td><% if (u.customer_id) { %><a href="/customers/<%= u.customer_id %>" class="mono"><%= u.customer_code %></a><% } else { %>N/A<% } %></td>
-        <td class="mono small"><%= u.hash_prefix %>…</td><td class="small"><%= u.last_login_at ? fmtDate(u.last_login_at) : 'nunca' %></td></tr>
+        <td class="mono small"><%= u.hash_prefix %>…</td><td class="small"><%= u.last_login_at ? fmtDate(u.last_login_at) : 'never' %></td></tr>
       <% }) %></tbody>
     </table></div>
     <% } %>
   </div>
-  <div class="card-footer bg-white d-flex justify-content-between align-items-center flex-wrap gap-2"><span class="small text-secondary">Página <%= page %> de <%= pages %></span><%- include('partials/pagination', { page, pages }) %></div>
+  <div class="card-footer bg-white d-flex justify-content-between align-items-center flex-wrap gap-2"><span class="small text-secondary">Page <%= page %> of <%= pages %></span><%- include('partials/pagination', { page, pages }) %></div>
 </div>
 <%- include('partials/footer') %>

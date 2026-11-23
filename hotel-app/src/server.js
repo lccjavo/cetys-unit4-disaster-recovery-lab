@@ -36,13 +36,13 @@ app.use(
   }),
 );
 
-// Bootstrap e iconos servidos localmente (funcionan sin Internet despues de construir la imagen).
+// Bootstrap and icons served locally (they work offline once the image is built).
 const nm = path.join(__dirname, '..', 'node_modules');
 app.use('/vendor/bootstrap', express.static(path.join(nm, 'bootstrap', 'dist'), { maxAge: '1d' }));
 app.use('/vendor/bootstrap-icons', express.static(path.join(nm, 'bootstrap-icons', 'font'), { maxAge: '1d' }));
 app.use('/static', express.static(path.join(__dirname, '..', 'public'), { maxAge: '1h' }));
 
-// Salud del servidor web: responde 200 aunque PostgreSQL o el Key Vault esten caidos.
+// Web server health: returns 200 even when PostgreSQL or the Key Vault are down.
 app.get('/health', (req, res) => {
   const v = vault.lastHealth();
   res.json({
@@ -64,12 +64,12 @@ app.use(requireAuth);
 app.use('/customers', require('./routes/customers').router);
 app.use(require('./routes/main'));
 
-app.use((req, res) => res.status(404).render('error', { title: 'No encontrado', message: 'La pagina solicitada no existe.', code: 404 }));
+app.use((req, res) => res.status(404).render('error', { title: 'Not found', message: 'The requested page does not exist.', code: 404 }));
 
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
   if (!res.locals.F) {
-    // El error ocurrio antes del middleware de vistas (por ejemplo, cuerpo JSON invalido).
+    // The error happened before the view middleware (for example, an invalid JSON body).
     Object.assign(res.locals, { user: null, csrf: '', flash: null, path: req.path, dbHealth: { target: db.target, ...db.health }, vaultHealth: vault.lastHealth(), F: require('./fields'), fmtDate: String, money: String, query: {}, qs: () => '?' });
   }
   let status = err.status || (err.type === 'entity.parse.failed' ? 400 : 500);
@@ -77,19 +77,19 @@ app.use((err, req, res, next) => {
   let message = err.message;
   if (err.code === 'DB_UNAVAILABLE') {
     status = 503;
-    title = 'Base de datos no disponible';
-    message = `No hay conexion con PostgreSQL (${db.target}). La aplicacion sigue en linea y se reconectara automaticamente cuando el servidor vuelva o se promueva el standby.`;
+    title = 'Database unavailable';
+    message = `No connection to PostgreSQL (${db.target}). The application stays online and will reconnect automatically when the server returns or the standby is promoted.`;
   } else if (err.code === '25006') {
     status = 503;
-    title = 'Servidor en modo solo lectura';
-    message = `El servidor actual (${db.target}) es un standby de solo lectura. Promuevalo o cambie la conexion en Recuperacion.`;
+    title = 'Server in read-only mode';
+    message = `The current server (${db.target}) is a read-only standby. Promote it or switch the connection on the Recovery page.`;
   } else if (status === 403) {
-    title = 'Acceso denegado';
+    title = 'Access denied';
   } else if (status === 404) {
-    title = 'No encontrado';
+    title = 'Not found';
   } else if (status >= 500) {
-    console.error('[hotel] error no controlado:', err);
-    message = 'Ocurrio un error interno. Revise los registros con: docker compose logs hotel-app';
+    console.error('[hotel] unhandled error:', err);
+    message = 'An internal error occurred. Check the logs with: docker compose logs hotel-app';
   }
   if (req.path.startsWith('/api/') || req.is('application/json')) {
     return res.status(status).json({ error: err.code || 'ERROR', message });
@@ -97,27 +97,27 @@ app.use((err, req, res, next) => {
   return res.status(status).render('error', { title, message, code: err.code || status });
 });
 
-// --------------------------------------------------------- inicializacion
+// ---------------------------------------------------------- initialization
 
 const TRANSIENT = new Set(['DB_UNAVAILABLE', 'VAULT_UNAVAILABLE', 'ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', '57P03']);
 
 async function autoInit() {
   if (!cfg.autoInit) {
-    console.log('[init] AUTO_INIT=false: use ./scripts/migrate.sh y ./scripts/seed.sh');
+    console.log('[init] AUTO_INIT=false: use ./scripts/migrate.sh and ./scripts/seed.sh');
     return;
   }
   for (let attempt = 1; attempt <= 90; attempt += 1) {
     try {
-      // Las migraciones van primero: crean/actualizan el rol hotel_app con la contrasena de .env.
+      // Migrations go first: they create/update the hotel_app role with the password from .env.
       try {
         await runMigrations({ host: db.target, log: (m) => console.log(m) });
       } catch (err) {
-        if (/modo recuperacion\/standby/.test(err.message)) {
-          console.log(`[init] ${db.target} esta en modo standby/recuperacion; no se ejecutan migraciones ni seed.`);
+        if (/recovery\/standby mode/.test(err.message)) {
+          console.log(`[init] ${db.target} is in standby/recovery mode; migrations and seed are skipped.`);
           return;
         }
         if (err.code === '28P01') {
-          console.error('[init] PostgreSQL rechazo la contrasena de administrador. El volumen se creo con otro POSTGRES_PASSWORD; vea "Problemas comunes" en el README.');
+          console.error('[init] PostgreSQL rejected the administrator password. The volume was created with a different POSTGRES_PASSWORD; see "Troubleshooting" in the README.');
           return;
         }
         throw err;
@@ -126,19 +126,19 @@ async function autoInit() {
       await runSeed({ log: (m) => console.log(m) });
       return;
     } catch (err) {
-      const transient = TRANSIENT.has(err.code) || /connect|timeout|no disponible|unavailable|starting up|shutting down/i.test(err.message);
+      const transient = TRANSIENT.has(err.code) || /connect|timeout|unavailable|not responding|starting up|shutting down/i.test(err.message);
       if (!transient) {
-        console.error(`[init] Inicializacion automatica detenida: ${err.message}`);
+        console.error(`[init] Automatic initialization stopped: ${err.message}`);
         return;
       }
-      console.log(`[init] Esperando dependencias (intento ${attempt}): ${err.message}`);
+      console.log(`[init] Waiting for dependencies (attempt ${attempt}): ${err.message}`);
       await new Promise((r) => setTimeout(r, Math.min(2000 * attempt, 10000)));
     }
   }
 }
 
 const server = app.listen(cfg.port, '0.0.0.0', () => {
-  console.log(`[hotel] Hotel Management App escuchando en :${cfg.port}; servidor de base de datos: ${db.target}`);
+  console.log(`[hotel] Hotel Management App listening on :${cfg.port}; database server: ${db.target}`);
   db.startMonitor(3000);
   db.watchTargetFile();
   vault.health({ fresh: true });
@@ -147,10 +147,10 @@ const server = app.listen(cfg.port, '0.0.0.0', () => {
 });
 
 process.on('SIGTERM', () => {
-  console.log('[hotel] SIGTERM recibido; cerrando');
+  console.log('[hotel] SIGTERM received; shutting down');
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(0), 3000).unref();
 });
 process.on('unhandledRejection', (err) => {
-  console.error('[hotel] promesa rechazada sin manejar:', err && err.message);
+  console.error('[hotel] unhandled promise rejection:', err && err.message);
 });

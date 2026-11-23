@@ -1,9 +1,9 @@
 'use strict';
 
 /**
- * Cliente HTTP de la API interna del Key Vault.
- * La aplicacion del hotel es la unica que orquesta cifrado y descifrado:
- * PostgreSQL nunca se conecta al Key Vault.
+ * HTTP client for the Key Vault internal API.
+ * The hotel application is the only component that orchestrates encryption and decryption:
+ * PostgreSQL never connects to the Key Vault.
  */
 
 const cfg = require('./config');
@@ -17,11 +17,11 @@ class VaultError extends Error {
 }
 
 const MESSAGES = {
-  VAULT_UNAVAILABLE: 'Key Vault no disponible: los campos cifrados no se pueden leer temporalmente.',
-  KEY_ACCESS_DISABLED: 'El acceso a las llaves esta deshabilitado en el Key Vault.',
-  KEK_NOT_FOUND: 'KEK no encontrado en el Key Vault. Los datos cifrados se conservan, pero no se pueden descifrar hasta recuperar el KEK.',
-  UNWRAP_FAILED: 'Fallo la autenticacion del DEK envuelto (KEK incorrecto o datos alterados).',
-  UNAUTHORIZED: 'El Key Vault rechazo el token de servicio del hotel.',
+  VAULT_UNAVAILABLE: 'Key Vault unavailable: encrypted fields are temporarily unreadable.',
+  KEY_ACCESS_DISABLED: 'Key access is disabled in the Key Vault.',
+  KEK_NOT_FOUND: 'KEK not found in the Key Vault. The encrypted data is preserved but cannot be decrypted until the KEK is recovered.',
+  UNWRAP_FAILED: 'Wrapped DEK authentication failed (wrong KEK or tampered data).',
+  UNAUTHORIZED: 'The Key Vault rejected the hotel service token.',
 };
 
 async function call(method, path, body) {
@@ -43,12 +43,12 @@ async function call(method, path, body) {
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
     const code = json.error || (res.status === 503 ? 'VAULT_UNAVAILABLE' : 'VAULT_ERROR');
-    throw new VaultError(code, MESSAGES[code] || json.message || 'Error del Key Vault', res.status);
+    throw new VaultError(code, MESSAGES[code] || json.message || 'Key Vault error', res.status);
   }
   return json;
 }
 
-// Estado en cache para no consultar al Key Vault en cada pagina.
+// Cached state so the Key Vault is not queried on every page.
 const cache = { at: 0, value: null };
 
 async function health({ fresh = false } = {}) {
@@ -66,7 +66,7 @@ async function health({ fresh = false } = {}) {
 }
 
 function lastHealth() {
-  return cache.value || { available: false, error: 'UNKNOWN', message: 'Estado del Key Vault aun no verificado' };
+  return cache.value || { available: false, error: 'UNKNOWN', message: 'Key Vault status not checked yet' };
 }
 
 module.exports = {

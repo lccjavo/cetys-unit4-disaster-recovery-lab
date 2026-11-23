@@ -3,9 +3,9 @@
 const { db } = require('../db');
 
 /**
- * Registra un evento de auditoria. Nunca recibe valores sensibles en claro:
- * solo nombres de campo, identificadores y resultados.
- * Si la base no esta disponible, el evento se reporta en la consola y la solicitud continua.
+ * Records an audit event. It never receives plaintext sensitive values:
+ * only field names, identifiers and outcomes.
+ * If the database is unavailable, the event is logged to the console and the request continues.
  */
 async function audit(req, action, { targetType = null, targetId = null, outcome = 'success', details = {} } = {}) {
   const user = req && req.session ? req.session.user : null;
@@ -16,7 +16,7 @@ async function audit(req, action, { targetType = null, targetId = null, outcome 
       [user ? user.id : null, user ? user.username : details.username || 'anonymous', action, targetType, targetId === null ? null : String(targetId), outcome, JSON.stringify(details), req ? req.ip : null],
     );
   } catch (err) {
-    console.warn(`[audit] no registrado (${action}/${outcome}): ${err.code || err.message}`);
+    console.warn(`[audit] not recorded (${action}/${outcome}): ${err.code || err.message}`);
   }
 }
 

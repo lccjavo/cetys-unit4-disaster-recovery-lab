@@ -2,27 +2,27 @@
 <div class="page-header d-flex flex-wrap justify-content-between align-items-end gap-2">
   <div>
     <h1><%= title %></h1>
-    <p class="lead"><%= result.total %> reservaciones<%= user.role === 'customer' ? ' a su nombre' : '' %>.</p>
+    <p class="lead"><%= result.total %> reservations<%= user.role === 'customer' ? ' in your name' : '' %>.</p>
   </div>
-  <a href="/reservations/new<%= filters.customer_id && user.role !== 'customer' ? `?customer_id=${filters.customer_id}` : '' %>" class="btn btn-cyan btn-sm"><i class="bi bi-calendar-plus me-1"></i>Nueva reservación</a>
+  <a href="/reservations/new<%= filters.customer_id && user.role !== 'customer' ? `?customer_id=${filters.customer_id}` : '' %>" class="btn btn-cyan btn-sm"><i class="bi bi-calendar-plus me-1"></i>New reservation</a>
 </div>
 <div class="card mb-3"><div class="card-body">
   <form method="get" class="row g-2 align-items-end" role="search">
     <% if (user.role !== 'customer') { %>
-    <div class="col-12 col-md-6 col-lg-4"><label for="q" class="form-label small mb-1">Buscar</label><input id="q" name="q" class="form-control" value="<%= filters.q %>" placeholder="RES-00001, CUS-0001 o nombre"></div>
+    <div class="col-12 col-md-6 col-lg-4"><label for="q" class="form-label small mb-1">Search</label><input id="q" name="q" class="form-control" value="<%= filters.q %>" placeholder="RES-00001, CUS-0001 or name"></div>
     <% } %>
-    <div class="col-12 col-md-4 col-lg-3"><label for="rstatus" class="form-label small mb-1">Estado</label>
-      <select id="rstatus" name="status" class="form-select" data-autosubmit><option value="">Todos</option><% F.RESERVATION_STATUSES.forEach(s => { %><option value="<%= s %>" <%= filters.status === s ? 'selected' : '' %>><%= F.RESERVATION_LABELS[s] %></option><% }) %></select></div>
-    <div class="col-12 col-md-2"><button class="btn btn-primary w-100" type="submit"><i class="bi bi-funnel me-1"></i>Filtrar</button></div>
+    <div class="col-12 col-md-4 col-lg-3"><label for="rstatus" class="form-label small mb-1">Status</label>
+      <select id="rstatus" name="status" class="form-select" data-autosubmit><option value="">All</option><% F.RESERVATION_STATUSES.forEach(s => { %><option value="<%= s %>" <%= filters.status === s ? 'selected' : '' %>><%= F.RESERVATION_LABELS[s] %></option><% }) %></select></div>
+    <div class="col-12 col-md-2"><button class="btn btn-primary w-100" type="submit"><i class="bi bi-funnel me-1"></i>Filter</button></div>
   </form>
 </div></div>
 <div class="card">
   <div class="card-body p-0">
     <% if (!result.rows.length) { %>
-      <div class="empty-state"><i class="bi bi-calendar-x"></i><p class="mt-2 mb-0">No hay reservaciones con estos filtros.</p></div>
+      <div class="empty-state"><i class="bi bi-calendar-x"></i><p class="mt-2 mb-0">No reservations match these filters.</p></div>
     <% } else { %>
     <div class="table-responsive"><table class="table table-hover align-middle mb-0">
-      <thead><tr><th>ID</th><th>Código</th><th>Cliente (ID)</th><th>Tipo de habitación</th><th>Llegada</th><th>Salida</th><th>Huéspedes</th><th>Estado</th><th class="text-end">Total</th><th class="text-end">Acción</th></tr></thead>
+      <thead><tr><th>ID</th><th>Code</th><th>Customer (ID)</th><th>Room type</th><th>Check-in</th><th>Check-out</th><th>Guests</th><th>Status</th><th class="text-end">Total</th><th class="text-end">Action</th></tr></thead>
       <tbody>
       <% result.rows.forEach(r => { %>
         <tr>
@@ -37,7 +37,7 @@
             <% if (['pending', 'confirmed'].includes(r.status)) { %>
               <form method="post" action="/reservations/<%= r.id %>/cancel" class="d-inline">
                 <input type="hidden" name="_csrf" value="<%= csrf %>">
-                <button type="submit" class="btn btn-sm btn-outline-danger" data-confirm="Se cancelará la reservación <%= r.reservation_code %>. Esta acción no se puede deshacer desde la GUI." data-confirm-title="Cancelar reservación"><i class="bi bi-x-circle"></i> Cancelar</button>
+                <button type="submit" class="btn btn-sm btn-outline-danger" data-confirm="Reservation <%= r.reservation_code %> will be cancelled. This cannot be undone from the GUI." data-confirm-title="Cancel reservation"><i class="bi bi-x-circle"></i> Cancel</button>
               </form>
             <% } %>
           </td>
@@ -47,7 +47,7 @@
     <% } %>
   </div>
   <div class="card-footer bg-white d-flex flex-wrap justify-content-between align-items-center gap-2">
-    <span class="small text-secondary">Página <%= result.page %> de <%= result.pages %></span>
+    <span class="small text-secondary">Page <%= result.page %> of <%= result.pages %></span>
     <%- include('../partials/pagination', { page: result.page, pages: result.pages }) %>
   </div>
 </div>

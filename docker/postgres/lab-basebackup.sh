@@ -1,6 +1,6 @@
 #!/bin/bash
-# Respaldo fisico con pg_basebackup hacia el volumen /backups.
-# Se ejecuta dentro del contenedor del servidor primario actual, como usuario postgres:
+# Physical backup with pg_basebackup into the /backups volume.
+# Runs inside the current primary server container, as the postgres user:
 #   docker compose exec -u postgres postgres-primary lab-basebackup.sh
 set -euo pipefail
 
@@ -10,26 +10,26 @@ CATALOG="/backups/catalog"
 mkdir -p "$CATALOG"
 
 if [ -e "$DEST" ]; then
-  echo "ERROR: $DEST ya existe" >&2
+  echo "ERROR: $DEST already exists" >&2
   exit 1
 fi
 
 IN_RECOVERY=$(psql -X -At -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT pg_is_in_recovery()")
 if [ "$IN_RECOVERY" != "f" ]; then
-  echo "ERROR: este servidor esta en modo recuperacion (standby). Respalde el primario." >&2
+  echo "ERROR: this server is in recovery mode (standby). Back up the primary." >&2
   exit 1
 fi
 
 CLUSTER=$(psql -X -At -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SHOW cluster_name")
 STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-echo "Iniciando pg_basebackup de $CLUSTER hacia $DEST"
+echo "Starting pg_basebackup of $CLUSTER into $DEST"
 
 pg_basebackup -h /var/run/postgresql -U "$POSTGRES_USER" -D "$DEST" \
   -Fp -X stream --checkpoint=fast --label="$NAME" --manifest-checksums=SHA256 --progress
 
 FINISHED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
-echo "Verificando el respaldo con pg_verifybackup"
+echo "Verifying the backup with pg_verifybackup"
 VERIFIED=false
 if pg_verifybackup "$DEST" >/tmp/verify.log 2>&1; then
   VERIFIED=true
@@ -62,6 +62,6 @@ cat > "$CATALOG/$NAME.json" <<JSON
 JSON
 chmod 0644 "$CATALOG/$NAME.json"
 
-echo "RESPALDO=$NAME"
-echo "VERIFICADO=$VERIFIED"
+echo "BACKUP=$NAME"
+echo "VERIFIED=$VERIFIED"
 [ "$VERIFIED" = true ]

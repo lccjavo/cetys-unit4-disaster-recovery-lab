@@ -1,15 +1,15 @@
 'use strict';
 
 /**
- * Cifrado de sobre (Envelope Encryption).
+ * Envelope Encryption.
  *
- *   KEK (Key Vault) --envuelve--> DEK por cliente (256 bits, aleatorio)
- *   DEK --AES-256-GCM--> cada uno de los 20 campos sensibles
+ *   KEK (Key Vault) --wraps--> one DEK per customer (256 bits, random)
+ *   DEK --AES-256-GCM--> each of the 20 sensitive fields
  *
- * Cada campo usa un nonce nuevo de 96 bits y un AAD que lo liga a:
- *   cliente + nombre del campo + version del esquema de cifrado.
- * Si alguien copia el ciphertext de un cliente a otro, o de un campo a otro,
- * la verificacion GCM falla.
+ * Every field uses a fresh 96-bit nonce and AAD that binds it to:
+ *   customer + field name + encryption schema version.
+ * If someone copies ciphertext from one customer to another, or from one field to another,
+ * GCM verification fails.
  */
 
 const crypto = require('node:crypto');
@@ -22,7 +22,7 @@ const SCHEMA_VERSION = 1;
 
 class DecryptionError extends Error {
   constructor(field) {
-    super(`La verificacion de autenticidad GCM fallo para el campo ${field}`);
+    super(`GCM authenticity verification failed for field ${field}`);
     this.code = 'DECRYPTION_AUTH_FAILED';
     this.status = 422;
   }
@@ -62,12 +62,12 @@ function decryptField(dek, customerId, field, envelope) {
 }
 
 /**
- * Genera un DEK nuevo, cifra los 20 campos y pide al Key Vault envolver el DEK.
- * Devuelve SOLO material cifrado: nada en el resultado permite leer los campos sin el KEK.
+ * Generates a new DEK, encrypts the 20 fields and asks the Key Vault to wrap the DEK.
+ * Returns ONLY encrypted material: nothing in the result can read the fields without the KEK.
  */
 async function sealProfile(customerId, sensitive) {
   const missing = SENSITIVE_KEYS.filter((k) => !(k in sensitive));
-  if (missing.length) throw new Error(`Faltan campos sensibles: ${missing.join(', ')}`);
+  if (missing.length) throw new Error(`Missing sensitive fields: ${missing.join(', ')}`);
   const dek = crypto.randomBytes(32);
   const dekRef = crypto.randomUUID();
   try {
@@ -91,7 +91,7 @@ async function sealProfile(customerId, sensitive) {
   }
 }
 
-/** Desenvuelve el DEK con el Key Vault y descifra los campos solicitados. */
+/** Unwraps the DEK through the Key Vault and decrypts the requested fields. */
 async function openFields(customerId, keyRow, encryptedFields, fields) {
   const { dek_b64: dekB64 } = await vault.unwrapDek(keyRow, dekContext(customerId, keyRow.dek_ref));
   const dek = Buffer.from(dekB64, 'base64');

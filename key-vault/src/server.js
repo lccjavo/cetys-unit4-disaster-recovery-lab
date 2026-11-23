@@ -8,23 +8,23 @@ const { createGui } = require('./gui');
 const store = new VaultStore(cfg);
 
 if (cfg.usingDefaultSecrets.length) {
-  console.warn(`[vault] AVISO: usando secretos por defecto para ${cfg.usingDefaultSecrets.join(', ')}. Ejecute ./scripts/setup-env.sh`);
+  console.warn(`[vault] WARNING: using default secrets for ${cfg.usingDefaultSecrets.join(', ')}. Run ./scripts/setup-env.sh`);
 }
 
 const api = createApi(store, cfg).listen(cfg.apiPort, '0.0.0.0', () => {
-  console.log(`[vault] API interna escuchando en :${cfg.apiPort} (no publicada al anfitrion)`);
+  console.log(`[vault] Internal API listening on :${cfg.apiPort} (not published to the host)`);
 });
 const gui = createGui(store, cfg).listen(cfg.guiPort, '0.0.0.0', () => {
-  console.log(`[vault] GUI de administracion escuchando en :${cfg.guiPort}`);
-  console.log(`[vault] Estado del almacen: ${store.status()}; KEK activo: ${store.activeKek() ? store.activeKek().kek_id : 'ninguno'}`);
+  console.log(`[vault] Administration GUI listening on :${cfg.guiPort}`);
+  console.log(`[vault] Key store status: ${store.status()}; active KEK: ${store.activeKek() ? store.activeKek().kek_id : 'none'}`);
 });
 
 function shutdown(signal) {
-  console.log(`[vault] ${signal} recibido; guardando estado`);
+  console.log(`[vault] ${signal} received; saving state`);
   try {
     store.saveStateNow();
   } catch (err) {
-    console.error('[vault] error guardando estado:', err.message);
+    console.error('[vault] error saving state:', err.message);
   }
   api.close();
   gui.close();

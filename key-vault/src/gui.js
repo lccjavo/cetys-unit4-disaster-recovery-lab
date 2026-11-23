@@ -1,8 +1,8 @@
 'use strict';
 
 /**
- * Interfaz web de administracion del Key Vault (puerto 3001, publicado solo en 127.0.0.1).
- * No expone las rutas criptograficas /api/v1/*: esas viven en el puerto interno 8200.
+ * Key Vault administration web interface (port 3001, published only on 127.0.0.1).
+ * It does not expose the /api/v1/* cryptographic routes: those live on internal port 8200.
  */
 
 const path = require('node:path');
@@ -20,8 +20,8 @@ function safeEqual(a, b) {
 }
 
 function fmtDate(iso) {
-  if (!iso) return 'N/D';
-  return new Date(iso).toLocaleString('es-MX', { timeZone: 'America/Tijuana', hour12: false });
+  if (!iso) return 'N/A';
+  return new Date(iso).toLocaleString('en-US', { timeZone: 'America/Tijuana', hour12: false });
 }
 
 function createGui(store, cfg) {
@@ -70,7 +70,7 @@ function createGui(store, cfg) {
     }),
   );
 
-  // CSRF: token sincronizado por sesion.
+  // CSRF: per-session synchronizer token.
   app.use((req, res, next) => {
     if (!req.session.csrf) req.session.csrf = crypto.randomBytes(24).toString('hex');
     res.locals.csrf = req.session.csrf;
@@ -83,7 +83,7 @@ function createGui(store, cfg) {
     if (req.method === 'POST') {
       const sent = (req.body && req.body._csrf) || req.get('x-csrf-token') || '';
       if (!safeEqual(sent, req.session.csrf)) {
-        return res.status(403).render('error', { title: 'Solicitud rechazada', message: 'Token CSRF invalido. Recargue la pagina.' });
+        return res.status(403).render('error', { title: 'Request rejected', message: 'Invalid CSRF token. Reload the page.' });
       }
     }
     return next();
@@ -97,7 +97,7 @@ function createGui(store, cfg) {
 
   app.get('/login', (req, res) => {
     if (req.session.admin) return res.redirect('/');
-    return res.render('login', { title: 'Acceso al Key Vault', error: null, username: '' });
+    return res.render('login', { title: 'Key Vault sign-in', error: null, username: '' });
   });
 
   app.post('/login', (req, res) => {
@@ -108,7 +108,7 @@ function createGui(store, cfg) {
       rec.first = Date.now();
     }
     if (rec.count >= 10) {
-      return res.status(429).render('login', { title: 'Acceso al Key Vault', error: 'Demasiados intentos. Espere 5 minutos.', username: '' });
+      return res.status(429).render('login', { title: 'Key Vault sign-in', error: 'Too many attempts. Wait 5 minutes.', username: '' });
     }
     const { username = '', password = '' } = req.body;
     const ok = safeEqual(username, cfg.adminUser) && safeEqual(password, cfg.adminPassword);
@@ -116,7 +116,7 @@ function createGui(store, cfg) {
       rec.count += 1;
       loginAttempts.set(key, rec);
       store.event('gui-login', username.slice(0, 60), 'denied');
-      return res.status(401).render('login', { title: 'Acceso al Key Vault', error: 'Usuario o contrasena incorrectos.', username });
+      return res.status(401).render('login', { title: 'Key Vault sign-in', error: 'Incorrect username or password.', username });
     }
     loginAttempts.delete(key);
     return req.session.regenerate((err) => {
@@ -140,50 +140,50 @@ function createGui(store, cfg) {
   const actor = (req) => `gui:${req.session.admin.username}`;
 
   app.get('/', (req, res) => {
-    res.render('dashboard', { title: 'Panel del Key Vault', s: store.summary(), events: store.state.events.slice(-8).reverse() });
+    res.render('dashboard', { title: 'Key Vault dashboard', s: store.summary(), events: store.state.events.slice(-8).reverse() });
   });
 
   app.get('/keys', (req, res) => {
-    res.render('keys', { title: 'Gestion de KEK', s: store.summary() });
+    res.render('keys', { title: 'KEK management', s: store.summary() });
   });
 
   app.get('/rotation', (req, res) => {
-    res.render('rotation', { title: 'Rotacion de llaves', s: store.summary() });
+    res.render('rotation', { title: 'Key rotation', s: store.summary() });
   });
 
   app.post('/rotation', (req, res) => {
     const r = store.rotate(actor(req));
-    flash(req, 'success', `Nuevo KEK activo: ${r.kek_id}. ${r.previous} queda retirado pero disponible para desenvolver. Respaldo automatico: ${r.backup}`);
+    flash(req, 'success', `New active KEK: ${r.kek_id}. ${r.previous} is retired but still available for unwrapping. Automatic backup: ${r.backup}`);
     res.redirect('/rotation');
   });
 
   app.get('/backups', (req, res) => {
-    res.render('backups', { title: 'Respaldo y recuperacion de KEK', s: store.summary(), backups: store.listBackups(), backupDir: cfg.backupDir });
+    res.render('backups', { title: 'KEK backup and recovery', s: store.summary(), backups: store.listBackups(), backupDir: cfg.backupDir });
   });
 
   app.post('/backups', (req, res) => {
     const r = store.createBackup('manual', actor(req));
-    flash(req, 'success', `Respaldo creado: ${r.file} (KEKs: ${r.kek_ids.join(', ')})`);
+    flash(req, 'success', `Backup created: ${r.file} (KEKs: ${r.kek_ids.join(', ')})`);
     res.redirect('/backups');
   });
 
   app.post('/backups/restore', (req, res) => {
     const r = store.restoreFromBackup(String(req.body.file || ''), actor(req));
-    const added = r.added.length ? `Agregados: ${r.added.join(', ')}.` : 'No faltaba ningun KEK.';
-    flash(req, 'success', `Restauracion desde ${r.file} completada. ${added} KEK activo: ${r.active_kek_id}`);
+    const added = r.added.length ? `Added: ${r.added.join(', ')}.` : 'No KEK was missing.';
+    flash(req, 'success', `Restore from ${r.file} completed. ${added} Active KEK: ${r.active_kek_id}`);
     res.redirect('/backups');
   });
 
   app.get('/disaster', (req, res) => {
-    res.render('disaster', { title: 'Simulacion de desastres', s: store.summary(), backups: store.listBackups() });
+    res.render('disaster', { title: 'Disaster simulation', s: store.summary(), backups: store.listBackups() });
   });
 
   app.post('/disaster/access', (req, res) => {
     const disable = req.body.action === 'disable';
     store.setAccessDisabled(disable, actor(req));
     flash(req, disable ? 'warning' : 'success', disable
-      ? 'Acceso a llaves DESHABILITADO. Las operaciones wrap/unwrap seran rechazadas.'
-      : 'Acceso a llaves restablecido.');
+      ? 'Key access DISABLED. Wrap/unwrap operations will be rejected.'
+      : 'Key access restored.');
     res.redirect('/disaster');
   });
 
@@ -191,18 +191,18 @@ function createGui(store, cfg) {
     const enable = req.body.action === 'enable';
     store.setSimulatedOutage(enable, actor(req));
     flash(req, enable ? 'warning' : 'success', enable
-      ? 'Interrupcion simulada ACTIVA: la API interna responde 503 a todas las solicitudes.'
-      : 'Interrupcion simulada finalizada: la API interna vuelve a responder.');
+      ? 'Simulated outage ACTIVE: the internal API returns 503 to every request.'
+      : 'Simulated outage ended: the internal API responds again.');
     res.redirect('/disaster');
   });
 
   app.post('/disaster/storage-loss', (req, res) => {
-    if (req.body.confirm !== 'PERDER-KEYSTORE') {
-      flash(req, 'danger', 'Confirmacion incorrecta. Escriba PERDER-KEYSTORE para continuar.');
+    if (req.body.confirm !== 'LOSE-KEYSTORE') {
+      flash(req, 'danger', 'Incorrect confirmation. Type LOSE-KEYSTORE to continue.');
       return res.redirect('/disaster');
     }
     const r = store.simulateStorageLoss(actor(req));
-    flash(req, 'danger', `Almacenamiento de KEK "perdido". El archivo se movio a cuarentena (${r.quarantined_as}). Restaure desde un respaldo.`);
+    flash(req, 'danger', `KEK storage "lost". The file was moved to quarantine (${r.quarantined_as}). Restore from a backup.`);
     return res.redirect('/disaster');
   });
 
@@ -211,14 +211,14 @@ function createGui(store, cfg) {
     const per = 25;
     const all = store.state.events.slice().reverse();
     const pages = Math.max(1, Math.ceil(all.length / per));
-    res.render('audit', { title: 'Bitacora de operaciones', events: all.slice((page - 1) * per, page * per), page, pages, total: all.length });
+    res.render('audit', { title: 'Operations log', events: all.slice((page - 1) * per, page * per), page, pages, total: all.length });
   });
 
-  app.use((req, res) => res.status(404).render('error', { title: 'No encontrado', message: 'La pagina solicitada no existe.' }));
+  app.use((req, res) => res.status(404).render('error', { title: 'Not found', message: 'The requested page does not exist.' }));
 
   // eslint-disable-next-line no-unused-vars
   app.use((err, req, res, next) => {
-    const message = err instanceof VaultError ? `${err.code}: ${err.message}` : 'Error interno del Key Vault.';
+    const message = err instanceof VaultError ? `${err.code}: ${err.message}` : 'Key Vault internal error.';
     if (!(err instanceof VaultError)) console.error('[vault-gui] error:', err.message);
     if (req.session && req.session.admin && req.method === 'POST') {
       flash(req, 'danger', message);

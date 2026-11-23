@@ -1,14 +1,14 @@
 'use strict';
 
 /**
- * Capa de acceso a PostgreSQL con servidor objetivo intercambiable.
+ * PostgreSQL access layer with a switchable target server.
  *
- * El servidor objetivo (postgres-primary, postgres-standby o postgres-recovery) se guarda
- * en /lab-control/db-target, un volumen compartido. Los scripts de failover y PITR lo
- * actualizan, y la aplicacion lo vigila cada 2 segundos para reconectarse sin reiniciar.
+ * The target server (postgres-primary, postgres-standby or postgres-recovery) is stored
+ * in /lab-control/db-target on a shared volume. The failover and PITR scripts update it,
+ * and the application watches it every 2 seconds to reconnect without restarting.
  *
- * La aplicacion nunca cae si PostgreSQL no responde: las consultas lanzan DbUnavailableError
- * y las paginas muestran el estado "no disponible".
+ * The application never crashes when PostgreSQL stops responding: queries throw
+ * DbUnavailableError and pages show an "unavailable" state.
  */
 
 const fs = require('node:fs');
@@ -27,7 +27,7 @@ const CONNECTION_CODES = new Set([
 
 class DbUnavailableError extends Error {
   constructor(host, cause) {
-    super(`Base de datos no disponible (${host}): ${cause ? cause.message : 'sin conexion'}`);
+    super(`Database unavailable (${host}): ${cause ? cause.message : 'no connection'}`);
     this.code = 'DB_UNAVAILABLE';
     this.host = host;
   }
@@ -83,8 +83,8 @@ class Database {
   createPool(host) {
     const pool = new Pool(poolOptions(host));
     pool.on('error', (err) => {
-      // Errores de clientes inactivos (por ejemplo, el servidor se detuvo): no deben tumbar el proceso.
-      console.warn(`[db] conexion inactiva perdida con ${host}: ${err.code || ''} ${err.message}`);
+      // Errors on idle clients (for example, the server stopped) must not crash the process.
+      console.warn(`[db] lost idle connection to ${host}: ${err.code || ''} ${err.message}`);
     });
     return pool;
   }
@@ -124,7 +124,7 @@ class Database {
       try {
         await client.query('ROLLBACK');
       } catch {
-        /* conexion perdida */
+        /* connection lost */
       }
       if (isConnectionError(err)) {
         this.markDown(err);
@@ -136,10 +136,10 @@ class Database {
     }
   }
 
-  // ----------------------------------------------------------- objetivo
+  // ----------------------------------------------------------- target
 
   switchTarget(host, { reason = 'manual', actor = 'system', persist = true } = {}) {
-    if (!cfg.db.candidates.includes(host)) throw new Error(`Servidor no permitido: ${host}`);
+    if (!cfg.db.candidates.includes(host)) throw new Error(`Server not allowed: ${host}`);
     const previous = this.target;
     if (persist) {
       fs.writeFileSync(TARGET_FILE, `${host}\n`, { mode: 0o666 });
@@ -151,7 +151,7 @@ class Database {
     this.pool = this.createPool(host);
     this.health.server = null;
     old.end().catch(() => {});
-    console.log(`[db] servidor objetivo cambiado: ${previous} -> ${host} (${reason})`);
+    console.log(`[db] target server changed: ${previous} -> ${host} (${reason})`);
     this.listeners.forEach((fn) => fn(previous, host));
     this.probe().catch(() => {});
   }
@@ -160,12 +160,12 @@ class Database {
     setInterval(() => {
       const fileTarget = readTargetFile();
       if (fileTarget && fileTarget !== this.target && cfg.db.candidates.includes(fileTarget)) {
-        this.switchTarget(fileTarget, { reason: 'archivo /lab-control/db-target', persist: false });
+        this.switchTarget(fileTarget, { reason: 'file /lab-control/db-target', persist: false });
       }
     }, 2000).unref();
   }
 
-  // ------------------------------------------------------------ salud
+  // ------------------------------------------------------------ health
 
   markDown(err) {
     const now = new Date().toISOString();
@@ -176,7 +176,7 @@ class Database {
       this.saveIncidents();
     }
     this.health.status = 'down';
-    this.health.lastError = err ? `${err.code || ''} ${err.message}`.trim() : 'sin conexion';
+    this.health.lastError = err ? `${err.code || ''} ${err.message}`.trim() : 'no connection';
     this.health.checkedAt = now;
   }
 
@@ -208,7 +208,7 @@ class Database {
     try {
       fs.writeFileSync(INCIDENTS_FILE, JSON.stringify(this.incidents, null, 2), { mode: 0o666 });
     } catch {
-      /* el volumen de control puede no existir fuera de Docker */
+      /* the control volume may not exist outside Docker */
     }
   }
 
@@ -228,7 +228,7 @@ class Database {
     setInterval(() => this.probe(), intervalMs).unref();
   }
 
-  // Sonda independiente de un candidato (no usa el pool principal).
+  // Independent probe of a candidate server (does not use the main pool).
   static async probeHost(host, timeoutMs = 1500) {
     const client = new Client({ ...poolOptions(host), connectionTimeoutMillis: timeoutMs });
     client.on('error', () => {});

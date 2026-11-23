@@ -22,7 +22,7 @@ module.exports = {
     password: env.DB_PASSWORD || 'lab_app_default',
     candidates: list(env.DB_CANDIDATE_HOSTS, 'postgres-primary,postgres-standby,postgres-recovery'),
   },
-  // Credenciales de administracion: solo las usa el ejecutor de migraciones.
+  // Administrator credentials: used only by the migration runner.
   dbAdmin: {
     user: env.DB_ADMIN_USER || 'hotel_admin',
     password: env.DB_ADMIN_PASSWORD || 'lab_admin_default',
@@ -47,12 +47,12 @@ module.exports = {
   demo: {
     adminPassword: env.HOTEL_DEMO_ADMIN_PASSWORD || 'Admin2026!',
     staffPassword: env.HOTEL_DEMO_STAFF_PASSWORD || 'Staff2026!',
-    customerPassword: env.HOTEL_DEMO_CUSTOMER_PASSWORD || 'Cliente2026!',
+    customerPassword: env.HOTEL_DEMO_CUSTOMER_PASSWORD || 'Customer2026!',
   },
 
   seed: {
     customerCount: 150,
-    // Semilla fija: identidades y perfiles reproducibles. DEKs y nonces siempre son aleatorios.
+    // Fixed seed: reproducible identities and profiles. DEKs and nonces are always random.
     prngSeed: 'CETYS-UNIDAD-4-2026',
     referenceDate: '2026-11-23',
   },

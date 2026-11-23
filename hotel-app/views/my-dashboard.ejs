@@ -1,35 +1,35 @@
 <%- include('partials/header') %>
 <div class="page-header">
-  <h1>Hola, <%= user.display_name %></h1>
-  <p class="lead">Desde aquí puede consultar su perfil y sus reservaciones. Solo usted y el personal autorizado pueden ver su información.</p>
+  <h1>Hello, <%= user.display_name %></h1>
+  <p class="lead">Here you can review your profile and reservations. Only you and authorized staff can see your information.</p>
 </div>
 <% if (dbError) { %>
   <div class="alert alert-danger"><i class="bi bi-database-x me-1"></i><%= dbError %></div>
 <% } else if (!customer) { %>
-  <div class="empty-state card"><i class="bi bi-person-x"></i><p class="mt-2 mb-0">No se encontró su perfil de cliente.</p></div>
+  <div class="empty-state card"><i class="bi bi-person-x"></i><p class="mt-2 mb-0">Your customer profile was not found.</p></div>
 <% } else { %>
 <div class="row g-3">
   <div class="col-12 col-md-6 col-lg-4">
     <div class="card h-100"><div class="card-body">
       <div class="d-flex justify-content-between align-items-start">
-        <div><div class="stat-label">Cliente</div><div class="h5 mb-0"><%= customer.customer_code %></div></div>
+        <div><div class="stat-label">Customer</div><div class="h5 mb-0"><%= customer.customer_code %></div></div>
         <%- include('partials/badges', { customerStatus: customer.status }) %>
       </div>
       <hr>
       <p class="mb-1"><i class="bi bi-geo-alt me-1 text-cyan"></i><%= customer.city %>, <%= customer.country %></p>
-      <p class="mb-1"><i class="bi bi-award me-1 text-cyan"></i>Nivel <%= customer.loyalty_tier %></p>
-      <p class="mb-3"><i class="bi bi-shield-lock me-1 text-cyan"></i>20 datos sensibles cifrados con <span class="mono"><%= customer.kek_id %></span></p>
-      <a href="/customers/<%= customer.id %>" class="btn btn-primary btn-sm"><i class="bi bi-person-vcard me-1"></i>Ver mi perfil</a>
+      <p class="mb-1"><i class="bi bi-award me-1 text-cyan"></i><%= customer.loyalty_tier %> tier</p>
+      <p class="mb-3"><i class="bi bi-shield-lock me-1 text-cyan"></i>20 sensitive fields encrypted with <span class="mono"><%= customer.kek_id %></span></p>
+      <a href="/customers/<%= customer.id %>" class="btn btn-primary btn-sm"><i class="bi bi-person-vcard me-1"></i>View my profile</a>
     </div></div>
   </div>
   <div class="col-12 col-lg-8">
     <div class="card h-100">
-      <div class="card-header d-flex justify-content-between"><span><i class="bi bi-calendar-check me-1"></i>Reservaciones recientes</span><a href="/reservations/new" class="btn btn-cyan btn-sm"><i class="bi bi-plus"></i> Reservar</a></div>
+      <div class="card-header d-flex justify-content-between"><span><i class="bi bi-calendar-check me-1"></i>Recent reservations</span><a href="/reservations/new" class="btn btn-cyan btn-sm"><i class="bi bi-plus"></i> Book</a></div>
       <div class="card-body p-0">
-        <% if (!reservations.length) { %><div class="empty-state"><i class="bi bi-calendar-x"></i><p class="mt-2 mb-0">Aún no tiene reservaciones.</p></div>
+        <% if (!reservations.length) { %><div class="empty-state"><i class="bi bi-calendar-x"></i><p class="mt-2 mb-0">You have no reservations yet.</p></div>
         <% } else { %>
         <div class="table-responsive"><table class="table mb-0 align-middle">
-          <thead><tr><th>Código</th><th>Habitación</th><th>Llegada</th><th>Salida</th><th>Estado</th></tr></thead>
+          <thead><tr><th>Code</th><th>Room</th><th>Check-in</th><th>Check-out</th><th>Status</th></tr></thead>
           <tbody><% reservations.forEach(r => { %><tr><td class="mono"><%= r.reservation_code %></td><td><%= r.room_type %></td><td><%= r.check_in_s %></td><td><%= r.check_out_s %></td><td><%- include('partials/badges', { reservationStatus: r.status }) %></td></tr><% }) %></tbody>
         </table></div>
         <% } %>

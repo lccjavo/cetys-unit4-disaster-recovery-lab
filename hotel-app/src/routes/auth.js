@@ -7,9 +7,9 @@ const { audit } = require('../services/audit');
 
 const router = express.Router();
 const attempts = new Map();
-// Hash ficticio para igualar el tiempo de respuesta cuando el usuario no existe.
+// Dummy hash to equalize response time when the user does not exist.
 let dummyHash = null;
-argon2.hash('usuario-inexistente', { type: argon2.argon2id, memoryCost: 19456, timeCost: 2, parallelism: 1 }).then((h) => {
+argon2.hash('nonexistent-user', { type: argon2.argon2id, memoryCost: 19456, timeCost: 2, parallelism: 1 }).then((h) => {
   dummyHash = h;
 });
 
@@ -19,7 +19,7 @@ function safeNext(next) {
 
 router.get('/login', (req, res) => {
   if (req.session.user) return res.redirect('/');
-  return res.render('login', { title: 'Iniciar sesion', error: null, username: '', next: safeNext(req.query.next) });
+  return res.render('login', { title: 'Sign in', error: null, username: '', next: safeNext(req.query.next) });
 });
 
 router.post('/login', async (req, res) => {
@@ -32,8 +32,8 @@ router.post('/login', async (req, res) => {
     rec.count = 0;
     rec.first = Date.now();
   }
-  const fail = (status, error) => res.status(status).render('login', { title: 'Iniciar sesion', error, username, next });
-  if (rec.count >= 8) return fail(429, 'Demasiados intentos fallidos. Espere 5 minutos.');
+  const fail = (status, error) => res.status(status).render('login', { title: 'Sign in', error, username, next });
+  if (rec.count >= 8) return fail(429, 'Too many failed attempts. Wait 5 minutes.');
 
   let user;
   try {
@@ -44,7 +44,7 @@ router.post('/login', async (req, res) => {
     );
     user = rows[0];
   } catch (err) {
-    if (err.code === 'DB_UNAVAILABLE') return fail(503, 'La base de datos no esta disponible en este momento. No es posible validar credenciales.');
+    if (err.code === 'DB_UNAVAILABLE') return fail(503, 'The database is not available right now. Credentials cannot be verified.');
     throw err;
   }
 
@@ -55,11 +55,11 @@ router.post('/login', async (req, res) => {
     rec.count += 1;
     attempts.set(key, rec);
     await audit(req, 'login', { targetType: 'user', outcome: 'denied', details: { username } });
-    return fail(401, 'Usuario o contrasena incorrectos.');
+    return fail(401, 'Incorrect username or password.');
   }
   attempts.delete(key);
   return req.session.regenerate(async (err) => {
-    if (err) return res.status(500).render('error', { title: 'Error', message: 'No se pudo crear la sesion.' });
+    if (err) return res.status(500).render('error', { title: 'Error', message: 'The session could not be created.' });
     req.session.user = {
       id: Number(user.id),
       username: user.username,

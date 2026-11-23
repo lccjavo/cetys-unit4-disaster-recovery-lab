@@ -1,29 +1,29 @@
 <% if (admin) { %>
-  <footer class="footer-lab text-center">CETYS Universidad, Unidad 4. Key Vault educativo: KMS simulado, no es un HSM ni un KMS de produccion.</footer>
+  <footer class="footer-lab text-center">CETYS University, Unit 4. Educational Key Vault: a simulated KMS, not an HSM or a production KMS.</footer>
 </main>
 <% } %>
 <div class="modal fade" id="confirmModal" tabindex="-1" aria-labelledby="confirmModalTitle" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
       <div class="modal-header">
-        <h2 class="modal-title fs-5" id="confirmModalTitle" data-role="title">Confirmar</h2>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        <h2 class="modal-title fs-5" id="confirmModalTitle" data-role="title">Confirm</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">
         <p data-role="body"></p>
         <div data-role="word-wrap" class="d-none">
-          <label for="confirmWord" class="form-label small">Escriba <strong data-role="word"></strong> para confirmar:</label>
+          <label for="confirmWord" class="form-label small">Type <strong data-role="word"></strong> to confirm:</label>
           <input id="confirmWord" class="form-control" data-role="word-input" autocomplete="off">
         </div>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
-        <button type="button" class="btn btn-danger" data-role="ok">Confirmar</button>
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-danger" data-role="ok">Confirm</button>
       </div>
     </div>
   </div>
 </div>
-<div class="loading-overlay" id="loadingOverlay"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Procesando...</span></div></div>
+<div class="loading-overlay" id="loadingOverlay"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Processing...</span></div></div>
 <script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
 <script src="/static/js/app.js"></script>
 </body>

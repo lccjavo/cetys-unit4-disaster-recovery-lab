@@ -1,6 +1,6 @@
 -- 002_views.sql
--- Vistas de apoyo para inspeccion con DBeaver. No exponen informacion en claro:
--- solo muestran metadatos de cifrado y fragmentos de ciphertext.
+-- Helper views for inspection with DBeaver. They expose no plaintext:
+-- only encryption metadata and ciphertext fragments.
 
 CREATE OR REPLACE VIEW v_customer_encryption_overview AS
 SELECT

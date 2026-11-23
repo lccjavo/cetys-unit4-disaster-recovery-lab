@@ -1,4 +1,4 @@
-# Imagen PostgreSQL 17 para el laboratorio (primario, standby y recuperacion).
+# PostgreSQL 17 image for the lab (primary, standby and recovery).
 FROM postgres:17-bookworm
 
 COPY lab-entrypoint.sh archive-wal.sh lab-basebackup.sh lab-prepare-recovery.sh /usr/local/bin/

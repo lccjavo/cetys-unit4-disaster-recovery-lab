@@ -1,6 +1,6 @@
 'use strict';
 
-// Pruebas unitarias del cifrado de campos (no requieren PostgreSQL ni Key Vault).
+// Field encryption unit tests (no PostgreSQL or Key Vault required).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
@@ -9,12 +9,12 @@ const { SENSITIVE_FIELDS, OPERATIONAL_FIELDS } = require('../src/fields');
 const { generateSeedData } = require('../src/data/generator');
 const policy = require('../src/policy');
 
-test('clasificacion: exactamente 20 campos sensibles y 20 operativos', () => {
+test('classification: exactly 20 sensitive and 20 operational fields', () => {
   assert.equal(SENSITIVE_FIELDS.length, 20);
   assert.equal(OPERATIONAL_FIELDS.length, 20);
 });
 
-test('AES-256-GCM: cifra y descifra; nonce de 96 bits distinto en cada operacion', () => {
+test('AES-256-GCM: encrypts and decrypts; a different 96-bit nonce on every operation', () => {
   const dek = crypto.randomBytes(32);
   const a = encryptField(dek, 7, 'phone_number', '+52 664 555 0101');
   const b = encryptField(dek, 7, 'phone_number', '+52 664 555 0101');
@@ -25,14 +25,14 @@ test('AES-256-GCM: cifra y descifra; nonce de 96 bits distinto en cada operacion
   assert.equal(decryptField(dek, 7, 'phone_number', a), '+52 664 555 0101');
 });
 
-test('AAD liga el ciphertext al cliente y al campo', () => {
+test('AAD binds the ciphertext to the customer and the field', () => {
   const dek = crypto.randomBytes(32);
   const env = encryptField(dek, 7, 'clabe', '999180000000000001');
   assert.throws(() => decryptField(dek, 8, 'clabe', env), { code: 'DECRYPTION_AUTH_FAILED' });
   assert.throws(() => decryptField(dek, 7, 'bank_account_number', env), { code: 'DECRYPTION_AUTH_FAILED' });
 });
 
-test('GCM detecta alteraciones del ciphertext y DEK incorrecto', () => {
+test('GCM detects ciphertext tampering and a wrong DEK', () => {
   const dek = crypto.randomBytes(32);
   const env = encryptField(dek, 1, 'passport_number', 'LAB123456');
   const ct = Buffer.from(env.ciphertext, 'base64');
@@ -41,7 +41,7 @@ test('GCM detecta alteraciones del ciphertext y DEK incorrecto', () => {
   assert.throws(() => decryptField(crypto.randomBytes(32), 1, 'passport_number', env), { code: 'DECRYPTION_AUTH_FAILED' });
 });
 
-test('generador reproducible: misma semilla produce los mismos perfiles', () => {
+test('reproducible generator: the same seed produces the same profiles', () => {
   const opts = { count: 150, seed: 'CETYS-UNIDAD-4-2026', referenceDate: '2026-11-23' };
   const a = generateSeedData(opts);
   const b = generateSeedData(opts);
@@ -56,7 +56,7 @@ test('generador reproducible: misma semilla produce los mismos perfiles', () => 
   }
 });
 
-test('autorizacion a nivel de objeto (BOLA/IDOR)', () => {
+test('object-level authorization (BOLA/IDOR)', () => {
   const owner = { id: 10, role: 'customer' };
   const other = { id: 11, role: 'customer' };
   const staff = { id: 2, role: 'staff' };

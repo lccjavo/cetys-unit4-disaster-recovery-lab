@@ -1,8 +1,8 @@
-/* Comportamiento comun de la interfaz (sin scripts en linea, compatible con CSP). */
+/* Shared UI behavior (no inline scripts, CSP compatible). */
 (function () {
   'use strict';
 
-  // 1) Validacion de formularios Bootstrap + indicador de carga al enviar.
+  // 1) Bootstrap form validation + loading indicator on submit.
   document.querySelectorAll('form').forEach(function (form) {
     form.addEventListener('submit', function (event) {
       if (form.classList.contains('needs-validation') && !form.checkValidity()) {
@@ -24,8 +24,8 @@
     });
   });
 
-  // 2) Dialogo de confirmacion para acciones destructivas.
-  //    <button data-confirm="texto" data-confirm-form="idFormulario" data-confirm-title="..." data-confirm-word="PALABRA">
+  // 2) Confirmation dialog for destructive actions.
+  //    <button data-confirm="text" data-confirm-form="formId" data-confirm-title="..." data-confirm-word="WORD">
   var modalEl = document.getElementById('confirmModal');
   if (modalEl && window.bootstrap) {
     var modal = new window.bootstrap.Modal(modalEl);
@@ -40,7 +40,7 @@
       trigger.addEventListener('click', function (event) {
         event.preventDefault();
         pendingForm = document.getElementById(trigger.getAttribute('data-confirm-form')) || trigger.closest('form');
-        modalEl.querySelector('[data-role="title"]').textContent = trigger.getAttribute('data-confirm-title') || 'Confirmar accion';
+        modalEl.querySelector('[data-role="title"]').textContent = trigger.getAttribute('data-confirm-title') || 'Confirm action';
         modalEl.querySelector('[data-role="body"]').textContent = trigger.getAttribute('data-confirm');
         requiredWord = trigger.getAttribute('data-confirm-word') || '';
         okBtn.className = 'btn ' + (trigger.getAttribute('data-confirm-variant') || 'btn-danger');
@@ -74,12 +74,12 @@
     });
   }
 
-  // 3) Envio automatico de filtros al cambiar un select.
+  // 3) Auto-submit filters when a select changes.
   document.querySelectorAll('[data-autosubmit]').forEach(function (el) {
     el.addEventListener('change', function () { el.form.submit(); });
   });
 
-  // 4) Revelar informacion sensible (llama al backend; la autorizacion se valida en el servidor).
+  // 4) Reveal sensitive information (calls the backend; authorization is enforced on the server).
   var csrf = document.querySelector('meta[name="csrf-token"]');
   document.querySelectorAll('[data-reveal-group]').forEach(function (btn) {
     btn.addEventListener('click', function () {
@@ -89,7 +89,7 @@
       var status = container.querySelector('[data-role="reveal-status"]');
       var original = btn.innerHTML;
       btn.disabled = true;
-      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Descifrando...';
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Decrypting...';
       fetch('/customers/' + encodeURIComponent(customerId) + '/reveal', {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'x-csrf-token': csrf ? csrf.content : '' },
@@ -99,10 +99,10 @@
         return res.json().then(function (json) { return { ok: res.ok, json: json }; });
       }).then(function (r) {
         if (!r.ok) {
-          showStatus(status, 'danger', r.json.message || 'No fue posible descifrar.', r.json.error);
+          showStatus(status, 'danger', r.json.message || 'Decryption was not possible.', r.json.error);
           container.querySelectorAll('[data-field]').forEach(function (el) {
             if (fields.indexOf(el.getAttribute('data-field')) >= 0) {
-              el.innerHTML = '<span class="badge text-bg-secondary"><i class="bi bi-lock-fill me-1"></i>No disponible temporalmente</span>';
+              el.innerHTML = '<span class="badge text-bg-secondary"><i class="bi bi-lock-fill me-1"></i>Temporarily unavailable</span>';
             }
           });
           btn.disabled = false;
@@ -119,12 +119,12 @@
         });
         (r.json.denied || []).forEach(function (key) {
           var el = container.querySelector('[data-field="' + key + '"]');
-          if (el) el.innerHTML = '<span class="badge text-bg-warning"><i class="bi bi-shield-lock me-1"></i>Sin autorizacion para su rol</span>';
+          if (el) el.innerHTML = '<span class="badge text-bg-warning"><i class="bi bi-shield-lock me-1"></i>Not authorized for your role</span>';
         });
-        showStatus(status, 'success', 'Descifrado con el DEK del cliente, desenvuelto por el Key Vault con ' + r.json.kek_id + ' en ' + r.json.elapsed_ms + ' ms.');
-        btn.innerHTML = '<i class="bi bi-eye me-1"></i>Informacion revelada';
+        showStatus(status, 'success', 'Decrypted with the customer DEK, unwrapped by the Key Vault with ' + r.json.kek_id + ' in ' + r.json.elapsed_ms + ' ms.');
+        btn.innerHTML = '<i class="bi bi-eye me-1"></i>Information revealed';
       }).catch(function () {
-        showStatus(status, 'danger', 'Error de red al contactar el servidor.');
+        showStatus(status, 'danger', 'Network error while contacting the server.');
         btn.disabled = false;
         btn.innerHTML = original;
       });
@@ -137,7 +137,7 @@
     el.textContent = (code ? '[' + code + '] ' : '') + message;
   }
 
-  // 5) Generador de datos ficticios para el formulario de nuevo cliente.
+  // 5) Fictional data generator for the new customer form.
   var gen = document.getElementById('generateFakeCustomer');
   if (gen) {
     gen.addEventListener('click', function () {
@@ -156,7 +156,7 @@
     });
   }
 
-  // 6) Auto-actualizacion opcional (pagina de recuperacion durante simulaciones).
+  // 6) Optional auto-refresh (recovery page during simulations).
   var refresh = document.querySelector('[data-autorefresh]');
   if (refresh) {
     var seconds = Number(refresh.getAttribute('data-autorefresh')) || 5;
@@ -166,7 +166,7 @@
     }, seconds * 1000);
   }
 
-  // 7) Activar pestana indicada en el hash (#tab-...).
+  // 7) Activate the tab named in the URL hash (#tab-...).
   if (window.location.hash && window.bootstrap) {
     var tabBtn = document.querySelector('[data-bs-target="' + window.location.hash + '"]');
     if (tabBtn) new window.bootstrap.Tab(tabBtn).show();

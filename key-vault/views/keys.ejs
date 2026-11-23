@@ -1,26 +1,26 @@
 <%- include('partials/header') %>
 <div class="page-header">
-  <h1>Gestion de KEK</h1>
-  <p class="lead">Versiones de Key Encryption Keys. El material de llave nunca se muestra; solo una huella SHA-256 truncada.</p>
+  <h1>KEK management</h1>
+  <p class="lead">Key Encryption Key versions. Key material is never shown; only a truncated SHA-256 fingerprint.</p>
 </div>
 <div class="card">
   <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
-    <span><i class="bi bi-key me-1"></i>KEKs registrados (<%= s.kek_count %>)</span>
-    <a class="btn btn-sm btn-cyan" href="/rotation"><i class="bi bi-arrow-repeat me-1"></i>Rotar KEK</a>
+    <span><i class="bi bi-key me-1"></i>Registered KEKs (<%= s.kek_count %>)</span>
+    <a class="btn btn-sm btn-cyan" href="/rotation"><i class="bi bi-arrow-repeat me-1"></i>Rotate KEK</a>
   </div>
   <div class="card-body p-0">
     <% if (!s.keks.length) { %>
-      <div class="empty-state"><i class="bi bi-key"></i><p class="mt-2">No hay KEKs. <%= s.vault_status === 'KEYSTORE_MISSING' ? 'El keystore esta ausente: restaure desde un respaldo.' : 'El primer KEK se crea al ejecutar ./scripts/seed.sh.' %></p></div>
+      <div class="empty-state"><i class="bi bi-key"></i><p class="mt-2">No KEKs. <%= s.vault_status === 'KEYSTORE_MISSING' ? 'The keystore is missing: restore from a backup.' : 'The first KEK is created when ./scripts/seed.sh runs.' %></p></div>
     <% } else { %>
     <div class="table-responsive"><table class="table table-hover align-middle mb-0">
-      <thead><tr><th>kek_id</th><th>Version</th><th>Algoritmo</th><th>Estado</th><th>Creado</th><th>Retirado</th><th>Huella</th><th class="text-end">Wrap</th><th class="text-end">Unwrap</th></tr></thead>
+      <thead><tr><th>kek_id</th><th>Version</th><th>Algorithm</th><th>Status</th><th>Created</th><th>Retired</th><th>Fingerprint</th><th class="text-end">Wrap</th><th class="text-end">Unwrap</th></tr></thead>
       <tbody>
       <% s.keks.forEach(k => { %>
         <tr>
           <td class="mono fw-semibold"><%= k.kek_id %></td>
           <td>v<%= k.version %></td>
           <td><%= k.algorithm %></td>
-          <td><span class="badge text-bg-<%= k.status === 'active' ? 'success' : 'secondary' %>"><%= k.status === 'active' ? 'Activo (envuelve y desenvuelve)' : 'Retirado (solo desenvuelve)' %></span></td>
+          <td><span class="badge text-bg-<%= k.status === 'active' ? 'success' : 'secondary' %>"><%= k.status === 'active' ? 'Active (wraps and unwraps)' : 'Retired (unwrap only)' %></span></td>
           <td class="small"><%= fmtDate(k.created_at) %></td>
           <td class="small"><%= k.retired_at ? fmtDate(k.retired_at) : 'N/A' %></td>
           <td class="mono small"><%= k.fingerprint %></td>
@@ -34,12 +34,12 @@
 </div>
 <div class="row g-3 mt-1">
   <div class="col-12 col-md-6"><div class="card h-100"><div class="card-body small">
-    <h2 class="h6"><i class="bi bi-info-circle text-cyan me-1"></i>Donde vive el material de llave</h2>
-    <p class="mb-0">En el archivo <code>/vault/keys/keystore.json</code> del volumen Docker <code>vault-keys</code>, separado de PostgreSQL. PostgreSQL solo almacena el <code>kek_id</code>, que es una referencia, y el DEK envuelto.</p>
+    <h2 class="h6"><i class="bi bi-info-circle text-cyan me-1"></i>Where the key material lives</h2>
+    <p class="mb-0">In the file <code>/vault/keys/keystore.json</code> on the <code>vault-keys</code> Docker volume, separate from PostgreSQL. PostgreSQL only stores the <code>kek_id</code>, which is a reference, and the wrapped DEK.</p>
   </div></div></div>
   <div class="col-12 col-md-6"><div class="card h-100"><div class="card-body small">
-    <h2 class="h6"><i class="bi bi-clock-history text-cyan me-1"></i>KEKs historicos</h2>
-    <p class="mb-0">Los KEK retirados no se eliminan: siguen desenvolviendo los DEK que se envolvieron con ellos. El hotel puede migrar esos DEK al KEK activo con la operacion de re-envoltura (Seguridad, en la app del hotel).</p>
+    <h2 class="h6"><i class="bi bi-clock-history text-cyan me-1"></i>Historical KEKs</h2>
+    <p class="mb-0">Retired KEKs are not deleted: they keep unwrapping the DEKs that were wrapped with them. The hotel can migrate those DEKs to the active KEK with the re-wrap operation (Security page in the hotel app).</p>
   </div></div></div>
 </div>
 <%- include('partials/footer') %>

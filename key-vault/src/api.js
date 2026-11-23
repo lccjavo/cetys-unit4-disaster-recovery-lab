@@ -1,9 +1,9 @@
 'use strict';
 
 /**
- * API interna del Key Vault (puerto 8200). Solo es accesible dentro de la red de Docker;
- * docker-compose.yml NO publica este puerto hacia el equipo anfitrion.
- * Todas las rutas, excepto /api/v1/health, requieren el token de servicio.
+ * Key Vault internal API (port 8200). Only reachable inside the Docker network;
+ * docker-compose.yml does NOT publish this port to the host.
+ * Every route except /api/v1/health requires the service token.
  */
 
 const crypto = require('node:crypto');
@@ -21,14 +21,14 @@ function createApi(store, cfg) {
   app.disable('x-powered-by');
   app.use(express.json({ limit: '2mb' }));
 
-  // Simulacion de "servicio no disponible": todo responde 503, incluso health.
-  // Las rutas /admin/* invocadas desde el propio contenedor (CLI) siguen funcionando,
-  // para poder terminar la simulacion con ./scripts/... aunque la GUI no este a la mano.
+  // "Service unavailable" simulation: everything returns 503, including health.
+  // /admin/* routes called from inside the container (CLI) keep working,
+  // so the simulation can be ended from ./scripts/... even without the GUI.
   app.use((req, res, next) => {
     const addr = req.socket.remoteAddress || '';
     const loopback = addr === '127.0.0.1' || addr === '::1' || addr === '::ffff:127.0.0.1';
     if (store.state.simulated_outage && !(loopback && req.path.startsWith('/api/v1/admin/'))) {
-      return res.status(503).json({ error: 'VAULT_UNAVAILABLE', message: 'Key Vault en interrupcion simulada' });
+      return res.status(503).json({ error: 'VAULT_UNAVAILABLE', message: 'Key Vault in simulated outage' });
     }
     return next();
   });
@@ -50,7 +50,7 @@ function createApi(store, cfg) {
     if (!tokenMatches(cfg.serviceToken, token)) {
       store.state.counters.denied += 1;
       store.event('api-auth', req.get('x-client-service') || 'unknown', 'denied', { path: req.path });
-      return res.status(401).json({ error: 'UNAUTHORIZED', message: 'Token de servicio invalido' });
+      return res.status(401).json({ error: 'UNAUTHORIZED', message: 'Invalid service token' });
     }
     req.actor = `service:${req.get('x-client-service') || 'unknown'}`;
     return next();
@@ -114,9 +114,9 @@ function createApi(store, cfg) {
       return res.status(err.status).json({ error: err.code, message: err.message });
     }
     if (err.type === 'entity.parse.failed') return res.status(400).json({ error: 'BAD_REQUEST' });
-    console.error('[vault-api] error interno:', err.message);
+    console.error('[vault-api] internal error:', err.message);
     store.state.counters.errors += 1;
-    return res.status(500).json({ error: 'INTERNAL', message: 'Error interno del Key Vault' });
+    return res.status(500).json({ error: 'INTERNAL', message: 'Key Vault internal error' });
   });
 
   return app;

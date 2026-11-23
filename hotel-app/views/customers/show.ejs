@@ -3,24 +3,24 @@
   const allowedSet = new Set(allowed);
   const fieldsFor = (groups) => F.SENSITIVE_FIELDS.filter(f => groups.includes(f.group));
   const vaultReady = vaultHealth.available && vaultHealth.vault_status === 'READY' && !vaultHealth.access_disabled;
-  const yesNo = (b) => b ? 'Sí' : 'No';
+  const yesNo = (b) => b ? 'Yes' : 'No';
 %>
 <div class="page-header d-flex flex-wrap justify-content-between align-items-end gap-2">
   <div>
-    <nav aria-label="Ruta"><ol class="breadcrumb small mb-1">
-      <% if (user.role !== 'customer') { %><li class="breadcrumb-item"><a href="/customers">Clientes</a></li><% } %>
+    <nav aria-label="Breadcrumb"><ol class="breadcrumb small mb-1">
+      <% if (user.role !== 'customer') { %><li class="breadcrumb-item"><a href="/customers">Customers</a></li><% } %>
       <li class="breadcrumb-item active" aria-current="page"><%= c.customer_code %></li>
     </ol></nav>
     <h1><%= c.full_name %> <%- include('../partials/badges', { customerStatus: c.status }) %></h1>
     <p class="lead"><i class="bi bi-geo-alt me-1"></i><%= c.city %>, <%= c.country %> · <span class="mono"><%= c.username %></span></p>
   </div>
-  <a href="/reservations/new?customer_id=<%= c.id %>" class="btn btn-cyan btn-sm"><i class="bi bi-calendar-plus me-1"></i>Nueva reservación</a>
+  <a href="/reservations/new?customer_id=<%= c.id %>" class="btn btn-cyan btn-sm"><i class="bi bi-calendar-plus me-1"></i>New reservation</a>
 </div>
 
 <div class="card">
   <div class="card-header bg-white pb-0 border-0">
     <ul class="nav nav-tabs flex-nowrap overflow-auto" role="tablist">
-      <% const tabs = [['overview', 'grid', 'Resumen'], ['personal', 'person', 'Información personal'], ['financial', 'credit-card', 'Información financiera'], ['family', 'people', 'Familia y acompañantes'], ['preferences', 'sliders', 'Preferencias'], ['reservations', 'calendar-check', 'Reservaciones'], ['encryption', 'shield-lock', 'Detalles de cifrado']]; %>
+      <% const tabs = [['overview', 'grid', 'Overview'], ['personal', 'person', 'Personal information'], ['financial', 'credit-card', 'Financial information'], ['family', 'people', 'Family and guests'], ['preferences', 'sliders', 'Preferences'], ['reservations', 'calendar-check', 'Reservations'], ['encryption', 'shield-lock', 'Encryption details']]; %>
       <% tabs.forEach(([id, icon, label], i) => { %>
         <li class="nav-item" role="presentation">
           <button class="nav-link text-nowrap <%= i === 0 ? 'active' : '' %>" id="btn-<%= id %>" data-bs-toggle="tab" data-bs-target="#tab-<%= id %>" type="button" role="tab" aria-controls="tab-<%= id %>" aria-selected="<%= i === 0 %>"><i class="bi bi-<%= icon %> me-1"></i><%= label %></button>
@@ -33,25 +33,25 @@
 
       <div class="tab-pane fade show active" id="tab-overview" role="tabpanel" aria-labelledby="btn-overview">
         <div class="row g-3">
-          <div class="col-12 col-md-6 col-xl-3"><div class="card stat-card h-100"><div class="card-body"><div class="stat-label">Código</div><div class="stat-value mono"><%= c.customer_code %></div></div></div></div>
-          <div class="col-12 col-md-6 col-xl-3"><div class="card stat-card h-100"><div class="card-body"><div class="stat-label">Lealtad</div><div class="stat-value"><%= c.loyalty_tier %></div></div></div></div>
-          <div class="col-12 col-md-6 col-xl-3"><div class="card stat-card h-100"><div class="card-body"><div class="stat-label">Reservaciones</div><div class="stat-value"><%= reservations.length %></div></div></div></div>
-          <div class="col-12 col-md-6 col-xl-3"><div class="card stat-card h-100"><div class="card-body"><div class="stat-label">KEK de su DEK</div><div class="stat-value mono"><%= c.kek_id || 'N/D' %></div></div></div></div>
+          <div class="col-12 col-md-6 col-xl-3"><div class="card stat-card h-100"><div class="card-body"><div class="stat-label">Code</div><div class="stat-value mono"><%= c.customer_code %></div></div></div></div>
+          <div class="col-12 col-md-6 col-xl-3"><div class="card stat-card h-100"><div class="card-body"><div class="stat-label">Loyalty</div><div class="stat-value"><%= c.loyalty_tier %></div></div></div></div>
+          <div class="col-12 col-md-6 col-xl-3"><div class="card stat-card h-100"><div class="card-body"><div class="stat-label">Reservations</div><div class="stat-value"><%= reservations.length %></div></div></div></div>
+          <div class="col-12 col-md-6 col-xl-3"><div class="card stat-card h-100"><div class="card-body"><div class="stat-label">KEK of this DEK</div><div class="stat-value mono"><%= c.kek_id || 'N/A' %></div></div></div></div>
         </div>
         <div class="row g-3 mt-1">
           <div class="col-12 col-lg-6">
-            <h2 class="h6 mt-2">Datos operativos (no cifrados en la aplicación)</h2>
-            <div class="field-row d-flex justify-content-between"><span class="field-label">Apodo</span><span class="field-value"><%= c.display_nickname %></span></div>
-            <div class="field-row d-flex justify-content-between"><span class="field-label">Idioma</span><span class="field-value"><%= c.preferred_language %></span></div>
-            <div class="field-row d-flex justify-content-between"><span class="field-label">Zona horaria</span><span class="field-value"><%= c.time_zone %></span></div>
-            <div class="field-row d-flex justify-content-between"><span class="field-label">Moneda</span><span class="field-value"><%= c.preferred_currency %></span></div>
-            <div class="field-row d-flex justify-content-between"><span class="field-label">Canal de contacto</span><span class="field-value"><%= c.preferred_contact_channel %></span></div>
+            <h2 class="h6 mt-2">Operational data (not encrypted by the application)</h2>
+            <div class="field-row d-flex justify-content-between"><span class="field-label">Nickname</span><span class="field-value"><%= c.display_nickname %></span></div>
+            <div class="field-row d-flex justify-content-between"><span class="field-label">Language</span><span class="field-value"><%= c.preferred_language %></span></div>
+            <div class="field-row d-flex justify-content-between"><span class="field-label">Time zone</span><span class="field-value"><%= c.time_zone %></span></div>
+            <div class="field-row d-flex justify-content-between"><span class="field-label">Currency</span><span class="field-value"><%= c.preferred_currency %></span></div>
+            <div class="field-row d-flex justify-content-between"><span class="field-label">Contact channel</span><span class="field-value"><%= c.preferred_contact_channel %></span></div>
           </div>
           <div class="col-12 col-lg-6">
-            <h2 class="h6 mt-2">Clasificación de datos</h2>
-            <div class="alert alert-info small mb-2"><i class="bi bi-lock-fill me-1"></i><strong>20 campos sensibles</strong> cifrados con AES-256-GCM. Se muestran enmascarados hasta que usted solicita revelarlos; el servidor valida su autorización y pide al Key Vault desenvolver el DEK.</div>
-            <div class="alert alert-light border small mb-2"><i class="bi bi-unlock me-1"></i><strong>20 campos operativos</strong> guardados como columnas normales, protegidos por autenticación y autorización.</div>
-            <p class="small text-secondary mb-0">Su rol (<strong><%= user.role %></strong>) puede revelar <strong><%= allowed.length %></strong> de 20 campos sensibles de este perfil.</p>
+            <h2 class="h6 mt-2">Data classification</h2>
+            <div class="alert alert-info small mb-2"><i class="bi bi-lock-fill me-1"></i><strong>20 sensitive fields</strong> encrypted with AES-256-GCM. They stay masked until you ask to reveal them; the server checks your authorization and asks the Key Vault to unwrap the DEK.</div>
+            <div class="alert alert-light border small mb-2"><i class="bi bi-unlock me-1"></i><strong>20 operational fields</strong> stored as regular columns, protected by authentication and authorization.</div>
+            <p class="small text-secondary mb-0">Your role (<strong><%= user.role %></strong>) may reveal <strong><%= allowed.length %></strong> of the 20 sensitive fields in this profile.</p>
           </div>
         </div>
       </div>
@@ -59,13 +59,13 @@
       <% [['personal', ['contact', 'identity', 'emergency']], ['financial', ['financial', 'employment']], ['family', ['family']]].forEach(([tab, groups]) => { const list = fieldsFor(groups); const can = list.filter(f => allowedSet.has(f.key)).map(f => f.key); %>
       <div class="tab-pane fade" id="tab-<%= tab %>" role="tabpanel" aria-labelledby="btn-<%= tab %>">
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-          <p class="small text-secondary mb-0"><i class="bi bi-lock-fill text-cyan me-1"></i>Valores cifrados en PostgreSQL. Se muestran enmascarados por defecto.</p>
+          <p class="small text-secondary mb-0"><i class="bi bi-lock-fill text-cyan me-1"></i>Values are encrypted in PostgreSQL and masked by default.</p>
           <% if (can.length) { %>
-            <button type="button" class="btn btn-sm btn-cyan" data-reveal-group data-customer-id="<%= c.id %>" data-fields="<%= can.join(',') %>" data-target="#tab-<%= tab %>" <%= vaultReady ? '' : 'title="El Key Vault no está disponible"' %>><i class="bi bi-unlock me-1"></i>Revelar información sensible (<%= can.length %>)</button>
+            <button type="button" class="btn btn-sm btn-cyan" data-reveal-group data-customer-id="<%= c.id %>" data-fields="<%= can.join(',') %>" data-target="#tab-<%= tab %>" <%= vaultReady ? '' : 'title="The Key Vault is not available"' %>><i class="bi bi-unlock me-1"></i>Reveal sensitive information (<%= can.length %>)</button>
           <% } %>
         </div>
         <div data-role="reveal-status" class="d-none"></div>
-        <% if (!vaultReady) { %><div class="alert alert-warning small"><i class="bi bi-safe me-1"></i>Key Vault no disponible o sin acceso a llaves: los campos cifrados no se pueden leer temporalmente. Los datos siguen almacenados de forma segura.</div><% } %>
+        <% if (!vaultReady) { %><div class="alert alert-warning small"><i class="bi bi-safe me-1"></i>Key Vault unavailable or key access disabled: encrypted fields are temporarily unreadable. The data remains securely stored.</div><% } %>
         <% groups.forEach(g => { %>
           <h2 class="h6 mt-3 text-cyan"><%= F.GROUPS[g] %></h2>
           <div class="row">
@@ -74,9 +74,9 @@
               <div class="field-row">
                 <div class="field-label"><%= f.label %> <span class="mono text-secondary">(<%= f.key %>)</span></div>
                 <% if (allowedSet.has(f.key)) { %>
-                  <div class="field-value masked" data-field="<%= f.key %>">•••••••••• <span class="badge text-bg-light border fw-normal">cifrado</span></div>
+                  <div class="field-value masked" data-field="<%= f.key %>">•••••••••• <span class="badge text-bg-light border fw-normal">encrypted</span></div>
                 <% } else { %>
-                  <div class="field-value"><span class="badge text-bg-warning"><i class="bi bi-shield-lock me-1"></i>Restringido para su rol</span></div>
+                  <div class="field-value"><span class="badge text-bg-warning"><i class="bi bi-shield-lock me-1"></i>Restricted for your role</span></div>
                 <% } %>
               </div>
             </div>
@@ -87,7 +87,7 @@
       <% }) %>
 
       <div class="tab-pane fade" id="tab-preferences" role="tabpanel" aria-labelledby="btn-preferences">
-        <p class="small text-secondary"><i class="bi bi-unlock me-1"></i>Los 20 campos operativos de menor sensibilidad (para este escenario). No usan cifrado de aplicación, por eso siguen visibles aunque el Key Vault esté caído.</p>
+        <p class="small text-secondary"><i class="bi bi-unlock me-1"></i>The 20 lower-sensitivity operational fields (for this scenario). They do not use application encryption, so they stay visible even when the Key Vault is down.</p>
         <div class="row">
           <% F.OPERATIONAL_FIELDS.forEach(f => { %>
             <div class="col-12 col-md-6 col-xl-4">
@@ -99,10 +99,10 @@
 
       <div class="tab-pane fade" id="tab-reservations" role="tabpanel" aria-labelledby="btn-reservations">
         <% if (!reservations.length) { %>
-          <div class="empty-state"><i class="bi bi-calendar-x"></i><p class="mt-2">Este cliente no tiene reservaciones.</p><a href="/reservations/new?customer_id=<%= c.id %>" class="btn btn-sm btn-primary">Crear reservación</a></div>
+          <div class="empty-state"><i class="bi bi-calendar-x"></i><p class="mt-2">This customer has no reservations.</p><a href="/reservations/new?customer_id=<%= c.id %>" class="btn btn-sm btn-primary">Create reservation</a></div>
         <% } else { %>
         <div class="table-responsive"><table class="table table-hover align-middle mb-0">
-          <thead><tr><th>ID</th><th>Código</th><th>Cliente</th><th>Habitación</th><th>Llegada</th><th>Salida</th><th>Noches</th><th>Estado</th><th class="text-end">Total</th></tr></thead>
+          <thead><tr><th>ID</th><th>Code</th><th>Customer</th><th>Room</th><th>Check-in</th><th>Check-out</th><th>Nights</th><th>Status</th><th class="text-end">Total</th></tr></thead>
           <tbody><% reservations.forEach(r => { %>
             <tr><td><%= r.id %></td><td class="mono"><%= r.reservation_code %></td><td class="mono"><%= r.customer_id %></td><td><%= r.room_type %></td><td><%= r.check_in_s %></td><td><%= r.check_out_s %></td><td><%= r.nights %></td><td><%- include('../partials/badges', { reservationStatus: r.status }) %></td><td class="text-end"><%= money(r.total_amount) %></td></tr>
           <% }) %></tbody>
@@ -111,25 +111,25 @@
       </div>
 
       <div class="tab-pane fade" id="tab-encryption" role="tabpanel" aria-labelledby="btn-encryption">
-        <div class="alert alert-light border small"><i class="bi bi-info-circle me-1"></i>Esta pestaña muestra <strong>metadatos y ciphertext</strong>, nunca el DEK ni el KEK en claro. El <code>kek_id</code> es solo una referencia: el material del KEK vive en el Key Vault, fuera de PostgreSQL.</div>
+        <div class="alert alert-light border small"><i class="bi bi-info-circle me-1"></i>This tab shows <strong>metadata and ciphertext</strong>, never the DEK or KEK in plaintext. The <code>kek_id</code> is only a reference: the KEK material lives in the Key Vault, outside PostgreSQL.</div>
         <div class="row g-3">
           <div class="col-12 col-lg-5">
-            <h2 class="h6">DEK del cliente (tabla <code>customer_keys</code>)</h2>
-            <div class="field-row"><div class="field-label">¿Campos sensibles cifrados?</div><div class="field-value"><%= c.encrypted_fields ? `Sí, ${Object.keys(c.encrypted_fields).length} campos` : 'No' %></div></div>
-            <div class="field-row"><div class="field-label">Referencia del DEK (dek_ref)</div><div class="mono"><%= c.dek_ref %></div></div>
-            <div class="field-row"><div class="field-label">kek_id (KEK que envuelve al DEK)</div><div class="mono fw-semibold"><%= c.kek_id %></div></div>
-            <div class="field-row"><div class="field-label">Algoritmo de envoltura / de campos</div><div><%= c.wrap_algorithm %> / <%= c.encryption_algorithm %></div></div>
-            <div class="field-row"><div class="field-label">Versión de esquema de cifrado</div><div><%= c.encryption_schema_version %></div></div>
-            <div class="field-row"><div class="field-label">DEK envuelto (wrapped_dek, base64)</div><div class="mono small"><%= c.wrapped_dek %></div></div>
-            <div class="field-row"><div class="field-label">Nonce de envoltura / etiqueta GCM</div><div class="mono small"><%= c.dek_wrap_nonce %> / <%= c.dek_wrap_tag %></div></div>
-            <div class="field-row"><div class="field-label">Creado / re-envuelto</div><div class="small"><%= fmtDate(c.key_created_at) %> / <%= c.rewrapped_at ? fmtDate(c.rewrapped_at) : 'nunca' %></div></div>
-            <div class="field-row"><div class="field-label">Key Vault</div><div><span class="status-dot <%= vaultReady ? 'ok' : 'down' %>"></span><%= vaultReady ? 'Disponible' : 'No disponible / acceso restringido' %></div></div>
+            <h2 class="h6">Customer DEK (table <code>customer_keys</code>)</h2>
+            <div class="field-row"><div class="field-label">Sensitive fields encrypted?</div><div class="field-value"><%= c.encrypted_fields ? `Yes, ${Object.keys(c.encrypted_fields).length} fields` : 'No' %></div></div>
+            <div class="field-row"><div class="field-label">DEK reference (dek_ref)</div><div class="mono"><%= c.dek_ref %></div></div>
+            <div class="field-row"><div class="field-label">kek_id (KEK that wraps the DEK)</div><div class="mono fw-semibold"><%= c.kek_id %></div></div>
+            <div class="field-row"><div class="field-label">Wrapping / field algorithm</div><div><%= c.wrap_algorithm %> / <%= c.encryption_algorithm %></div></div>
+            <div class="field-row"><div class="field-label">Encryption schema version</div><div><%= c.encryption_schema_version %></div></div>
+            <div class="field-row"><div class="field-label">Wrapped DEK (wrapped_dek, base64)</div><div class="mono small"><%= c.wrapped_dek %></div></div>
+            <div class="field-row"><div class="field-label">Wrapping nonce / GCM tag</div><div class="mono small"><%= c.dek_wrap_nonce %> / <%= c.dek_wrap_tag %></div></div>
+            <div class="field-row"><div class="field-label">Created / re-wrapped</div><div class="small"><%= fmtDate(c.key_created_at) %> / <%= c.rewrapped_at ? fmtDate(c.rewrapped_at) : 'never' %></div></div>
+            <div class="field-row"><div class="field-label">Key Vault</div><div><span class="status-dot <%= vaultReady ? 'ok' : 'down' %>"></span><%= vaultReady ? 'Available' : 'Unavailable / access restricted' %></div></div>
           </div>
           <div class="col-12 col-lg-7">
-            <h2 class="h6">Campos cifrados (tabla <code>customer_sensitive_data</code>)</h2>
-            <p class="small text-secondary">AAD de cada campo: <code>hotel-lab|field|v1|customer:<%= c.id %>|field:&lt;nombre&gt;</code></p>
+            <h2 class="h6">Encrypted fields (table <code>customer_sensitive_data</code>)</h2>
+            <p class="small text-secondary">Per-field AAD: <code>hotel-lab|field|v1|customer:<%= c.id %>|field:&lt;name&gt;</code></p>
             <div class="table-responsive" style="max-height: 420px"><table class="table table-sm align-middle mb-0">
-              <thead class="sticky-top"><tr><th>Campo</th><th>Nonce (96 bits)</th><th>Tag</th><th>Ciphertext</th><th class="text-end">Bytes</th></tr></thead>
+              <thead class="sticky-top"><tr><th>Field</th><th>Nonce (96 bits)</th><th>Tag</th><th>Ciphertext</th><th class="text-end">Bytes</th></tr></thead>
               <tbody><% fieldMeta.forEach(f => { %>
                 <tr><td class="mono small"><%= f.key %></td><td class="mono small"><%= f.nonce %></td><td class="mono small"><%= (f.tag || '').slice(0, 10) %>…</td><td class="mono small"><%= (f.ct || '').slice(0, 18) %>…</td><td class="text-end small"><%= f.ctBytes %></td></tr>
               <% }) %></tbody>

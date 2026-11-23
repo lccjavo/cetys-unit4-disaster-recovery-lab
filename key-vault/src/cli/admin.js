@@ -1,13 +1,13 @@
 'use strict';
 
 /**
- * CLI de administracion del Key Vault. Se ejecuta DENTRO del contenedor key-vault
- * y habla con la API interna en 127.0.0.1:8200 usando el token de servicio.
+ * Key Vault administration CLI. It runs INSIDE the key-vault container
+ * and talks to the internal API on 127.0.0.1:8200 using the service token.
  *
  *   node src/cli/admin.js status
- *   node src/cli/admin.js backup [motivo]
+ *   node src/cli/admin.js backup [reason]
  *   node src/cli/admin.js backups
- *   node src/cli/admin.js restore <archivo|latest>
+ *   node src/cli/admin.js restore <file|latest>
  *   node src/cli/admin.js access disable|enable
  *   node src/cli/admin.js outage enable|disable
  *   node src/cli/admin.js rotate
@@ -52,7 +52,7 @@ async function main() {
       let file = arg;
       if (!file || file === 'latest') {
         const { backups } = await call('GET', '/api/v1/admin/backups');
-        if (!backups.length) throw new Error('No hay respaldos de KEK');
+        if (!backups.length) throw new Error('There are no KEK backups');
         file = backups[0].file;
       }
       out = await call('POST', '/api/v1/admin/restore', { file });
@@ -68,7 +68,7 @@ async function main() {
       out = await call('POST', '/api/v1/admin/rotate');
       break;
     default:
-      console.error('Uso: admin.js status|backup|backups|restore|access|outage|rotate');
+      console.error('Usage: admin.js status|backup|backups|restore|access|outage|rotate');
       process.exit(2);
   }
   console.log(JSON.stringify(out, null, 2));

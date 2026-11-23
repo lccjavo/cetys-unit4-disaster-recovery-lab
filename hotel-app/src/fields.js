@@ -1,59 +1,59 @@
 'use strict';
 
 /**
- * Clasificacion de datos del perfil de cliente.
+ * Customer profile data classification.
  *
- * - 20 campos SENSIBLES: cifrados con AES-256-GCM usando el DEK de cada cliente.
- *   Se guardan en customer_sensitive_data.encrypted_fields (JSONB).
- * - 20 campos OPERATIVOS de menor sensibilidad (para este escenario educativo):
- *   columnas normales de la tabla customers, protegidas por autenticacion/autorizacion
- *   pero SIN cifrado a nivel de aplicacion.
+ * - 20 SENSITIVE fields: encrypted with AES-256-GCM using each customer's DEK.
+ *   Stored in customer_sensitive_data.encrypted_fields (JSONB).
+ * - 20 lower-sensitivity OPERATIONAL fields (for this educational scenario):
+ *   regular columns in the customers table, protected by authentication/authorization
+ *   but WITHOUT application-level encryption.
  */
 
 const SENSITIVE_FIELDS = [
-  { key: 'phone_number', label: 'Teléfono personal', group: 'contact', staff: true },
-  { key: 'personal_email', label: 'Correo personal', group: 'contact', staff: true },
-  { key: 'home_address', label: 'Domicilio particular', group: 'contact' },
-  { key: 'billing_address', label: 'Dirección de facturación', group: 'contact' },
-  { key: 'date_of_birth', label: 'Fecha de nacimiento', group: 'identity' },
-  { key: 'tax_id_rfc', label: 'RFC (ficticio)', group: 'identity' },
-  { key: 'passport_number', label: 'Pasaporte (ficticio)', group: 'identity' },
-  { key: 'card_number', label: 'Tarjeta de prueba (no valida)', group: 'financial' },
-  { key: 'cardholder_name', label: 'Titular de la tarjeta', group: 'financial' },
-  { key: 'card_expiration', label: 'Vencimiento de tarjeta (MM/AAAA)', group: 'financial' },
-  { key: 'bank_account_number', label: 'Cuenta bancaria (ficticia)', group: 'financial' },
-  { key: 'clabe', label: 'CLABE (ficticia, banco 999)', group: 'financial' },
-  { key: 'annual_income_range', label: 'Rango de ingreso anual', group: 'financial' },
-  { key: 'outstanding_balance', label: 'Saldo pendiente', group: 'financial' },
-  { key: 'employer_name', label: 'Empleador', group: 'employment' },
-  { key: 'company_legal_name', label: 'Razón social de la empresa', group: 'employment' },
-  { key: 'room_guests', label: 'Otros huéspedes en la habitación', group: 'family', staff: true },
-  { key: 'accompanying_children', label: 'Menores acompañantes', group: 'family', staff: true },
-  { key: 'emergency_contact_name', label: 'Contacto de emergencia', group: 'emergency', staff: true },
-  { key: 'emergency_contact_phone', label: 'Teléfono de emergencia', group: 'emergency', staff: true },
+  { key: 'phone_number', label: 'Personal phone number', group: 'contact', staff: true },
+  { key: 'personal_email', label: 'Personal email', group: 'contact', staff: true },
+  { key: 'home_address', label: 'Home address', group: 'contact' },
+  { key: 'billing_address', label: 'Billing address', group: 'contact' },
+  { key: 'date_of_birth', label: 'Date of birth', group: 'identity' },
+  { key: 'tax_id_rfc', label: 'Mexican tax ID, RFC (fictional)', group: 'identity' },
+  { key: 'passport_number', label: 'Passport (fictional)', group: 'identity' },
+  { key: 'card_number', label: 'Test payment card (not valid)', group: 'financial' },
+  { key: 'cardholder_name', label: 'Cardholder name', group: 'financial' },
+  { key: 'card_expiration', label: 'Card expiration (MM/YYYY)', group: 'financial' },
+  { key: 'bank_account_number', label: 'Bank account (fictional)', group: 'financial' },
+  { key: 'clabe', label: 'CLABE (fictional, bank 999)', group: 'financial' },
+  { key: 'annual_income_range', label: 'Annual income range', group: 'financial' },
+  { key: 'outstanding_balance', label: 'Outstanding balance', group: 'financial' },
+  { key: 'employer_name', label: 'Employer', group: 'employment' },
+  { key: 'company_legal_name', label: 'Company legal name', group: 'employment' },
+  { key: 'room_guests', label: 'Other guests sharing the room', group: 'family', staff: true },
+  { key: 'accompanying_children', label: 'Accompanying children', group: 'family', staff: true },
+  { key: 'emergency_contact_name', label: 'Emergency contact', group: 'emergency', staff: true },
+  { key: 'emergency_contact_phone', label: 'Emergency contact phone', group: 'emergency', staff: true },
 ];
 
 const OPERATIONAL_FIELDS = [
-  { key: 'display_nickname', label: 'Apodo para mostrar', type: 'text' },
-  { key: 'city', label: 'Ciudad', type: 'text' },
-  { key: 'country', label: 'País', type: 'text' },
-  { key: 'preferred_language', label: 'Idioma preferido', type: 'select', options: ['Español', 'Inglés', 'Francés', 'Alemán', 'Portugués', 'Japonés'] },
-  { key: 'time_zone', label: 'Zona horaria', type: 'text' },
-  { key: 'preferred_currency', label: 'Moneda preferida', type: 'select', options: ['MXN', 'USD', 'CAD', 'EUR', 'COP', 'ARS', 'CLP', 'PEN', 'BRL', 'JPY'] },
-  { key: 'preferred_room_category', label: 'Categoría de habitación', type: 'select', options: ['Sencilla', 'Doble', 'Suite Junior', 'Suite Ejecutiva', 'Familiar'] },
-  { key: 'preferred_bed_type', label: 'Tipo de cama', type: 'select', options: ['Individual', 'Matrimonial', 'Queen', 'King', 'Dos camas'] },
-  { key: 'preferred_floor', label: 'Piso preferido', type: 'select', options: ['Bajo', 'Medio', 'Alto', 'Sin preferencia'] },
-  { key: 'preferred_room_view', label: 'Vista preferida', type: 'select', options: ['Mar', 'Ciudad', 'Jardín', 'Montaña', 'Sin preferencia'] },
-  { key: 'preferred_pillow_type', label: 'Tipo de almohada', type: 'select', options: ['Pluma', 'Memory foam', 'Hipoalergénica', 'Firme', 'Suave'] },
-  { key: 'preferred_checkin_time', label: 'Hora de llegada preferida', type: 'time' },
-  { key: 'preferred_checkout_time', label: 'Hora de salida preferida', type: 'time' },
-  { key: 'breakfast_preference', label: 'Preferencia de desayuno', type: 'select', options: ['Continental', 'Americano', 'Mexicano', 'Vegetariano', 'Vegano', 'Sin desayuno'] },
-  { key: 'parking_required', label: 'Requiere estacionamiento', type: 'bool' },
-  { key: 'wifi_usage_preference', label: 'Uso de Wi-Fi', type: 'select', options: ['Básico', 'Trabajo remoto', 'Streaming', 'No usa'] },
-  { key: 'newsletter_opt_in', label: 'Suscrito al boletín', type: 'bool' },
-  { key: 'loyalty_tier', label: 'Nivel de lealtad', type: 'select', options: ['Bronce', 'Plata', 'Oro', 'Platino'] },
-  { key: 'preferred_contact_channel', label: 'Canal de contacto preferido', type: 'select', options: ['Correo', 'SMS', 'WhatsApp', 'Llamada', 'App del hotel'] },
-  { key: 'favorite_amenity', label: 'Amenidad favorita', type: 'select', options: ['Alberca', 'Spa', 'Gimnasio', 'Restaurante', 'Bar', 'Centro de negocios', 'Club infantil'] },
+  { key: 'display_nickname', label: 'Display nickname', type: 'text' },
+  { key: 'city', label: 'City', type: 'text' },
+  { key: 'country', label: 'Country', type: 'text' },
+  { key: 'preferred_language', label: 'Preferred language', type: 'select', options: ['Spanish', 'English', 'French', 'German', 'Portuguese', 'Japanese'] },
+  { key: 'time_zone', label: 'Time zone', type: 'text' },
+  { key: 'preferred_currency', label: 'Preferred currency', type: 'select', options: ['MXN', 'USD', 'CAD', 'EUR', 'COP', 'ARS', 'CLP', 'PEN', 'BRL', 'JPY'] },
+  { key: 'preferred_room_category', label: 'Preferred room category', type: 'select', options: ['Single', 'Double', 'Junior Suite', 'Executive Suite', 'Family'] },
+  { key: 'preferred_bed_type', label: 'Preferred bed type', type: 'select', options: ['Single', 'Full', 'Queen', 'King', 'Two beds'] },
+  { key: 'preferred_floor', label: 'Preferred floor', type: 'select', options: ['Low', 'Middle', 'High', 'No preference'] },
+  { key: 'preferred_room_view', label: 'Preferred room view', type: 'select', options: ['Ocean', 'City', 'Garden', 'Mountain', 'No preference'] },
+  { key: 'preferred_pillow_type', label: 'Preferred pillow type', type: 'select', options: ['Feather', 'Memory foam', 'Hypoallergenic', 'Firm', 'Soft'] },
+  { key: 'preferred_checkin_time', label: 'Preferred check-in time', type: 'time' },
+  { key: 'preferred_checkout_time', label: 'Preferred check-out time', type: 'time' },
+  { key: 'breakfast_preference', label: 'Breakfast preference', type: 'select', options: ['Continental', 'American', 'Mexican', 'Vegetarian', 'Vegan', 'No breakfast'] },
+  { key: 'parking_required', label: 'Parking required', type: 'bool' },
+  { key: 'wifi_usage_preference', label: 'Wi-Fi usage', type: 'select', options: ['Basic', 'Remote work', 'Streaming', 'Not used'] },
+  { key: 'newsletter_opt_in', label: 'Newsletter subscription', type: 'bool' },
+  { key: 'loyalty_tier', label: 'Loyalty tier', type: 'select', options: ['Bronze', 'Silver', 'Gold', 'Platinum'] },
+  { key: 'preferred_contact_channel', label: 'Preferred contact channel', type: 'select', options: ['Email', 'SMS', 'WhatsApp', 'Phone call', 'Hotel app'] },
+  { key: 'favorite_amenity', label: 'Favorite amenity', type: 'select', options: ['Pool', 'Spa', 'Gym', 'Restaurant', 'Bar', 'Business center', 'Kids club'] },
 ];
 
 const SENSITIVE_KEYS = SENSITIVE_FIELDS.map((f) => f.key);
@@ -61,15 +61,15 @@ const OPERATIONAL_KEYS = OPERATIONAL_FIELDS.map((f) => f.key);
 const STAFF_REVEALABLE = SENSITIVE_FIELDS.filter((f) => f.staff).map((f) => f.key);
 
 const GROUPS = {
-  contact: 'Contacto',
-  identity: 'Identidad',
-  financial: 'Financiero',
-  employment: 'Empleo',
-  family: 'Acompañantes',
-  emergency: 'Emergencia',
+  contact: 'Contact',
+  identity: 'Identity',
+  financial: 'Financial',
+  employment: 'Employment',
+  family: 'Accompanying guests',
+  emergency: 'Emergency',
 };
 
-// Pestanas de la vista de perfil y los grupos que muestran.
+// Profile tabs and the groups each one shows.
 const PROFILE_TABS = {
   personal: ['contact', 'identity', 'emergency'],
   financial: ['financial', 'employment'],
@@ -77,20 +77,20 @@ const PROFILE_TABS = {
 };
 
 const CUSTOMER_STATUSES = ['active', 'vip', 'inactive', 'suspended'];
-const STATUS_LABELS = { active: 'Activo', vip: 'VIP', inactive: 'Inactivo', suspended: 'Suspendido' };
+const STATUS_LABELS = { active: 'Active', vip: 'VIP', inactive: 'Inactive', suspended: 'Suspended' };
 const RESERVATION_STATUSES = ['pending', 'confirmed', 'checked_in', 'checked_out', 'cancelled'];
 const RESERVATION_LABELS = {
-  pending: 'Pendiente',
-  confirmed: 'Confirmada',
-  checked_in: 'Hospedado',
-  checked_out: 'Concluida',
-  cancelled: 'Cancelada',
+  pending: 'Pending',
+  confirmed: 'Confirmed',
+  checked_in: 'Checked in',
+  checked_out: 'Checked out',
+  cancelled: 'Cancelled',
 };
-const ROOM_TYPES = ['Sencilla', 'Doble', 'Suite Junior', 'Suite Ejecutiva', 'Familiar'];
-const ROOM_RATES = { Sencilla: 1450, Doble: 1890, 'Suite Junior': 2900, 'Suite Ejecutiva': 4200, Familiar: 3300 };
+const ROOM_TYPES = ['Single', 'Double', 'Junior Suite', 'Executive Suite', 'Family'];
+const ROOM_RATES = { Single: 1450, Double: 1890, 'Junior Suite': 2900, 'Executive Suite': 4200, Family: 3300 };
 
 if (SENSITIVE_FIELDS.length !== 20 || OPERATIONAL_FIELDS.length !== 20) {
-  throw new Error('La clasificacion debe tener exactamente 20 campos sensibles y 20 operativos');
+  throw new Error('The classification must have exactly 20 sensitive and 20 operational fields');
 }
 
 module.exports = {

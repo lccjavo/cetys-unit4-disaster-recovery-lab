@@ -1,6 +1,6 @@
 'use strict';
 
-// Pruebas unitarias del almacen de llaves (usa un directorio temporal).
+// Key store unit tests (uses a temporary directory).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -11,11 +11,11 @@ const { VaultStore } = require('../src/store');
 
 function freshStore() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vault-'));
-  const cfg = { dataDir: path.join(dir, 'keys'), backupDir: path.join(dir, 'backups'), backupPassphrase: 'prueba-unitaria' };
+  const cfg = { dataDir: path.join(dir, 'keys'), backupDir: path.join(dir, 'backups'), backupPassphrase: 'unit-test' };
   return { store: new VaultStore(cfg), cfg };
 }
 
-test('inicializa kek-v1 una sola vez y crea respaldo automatico', () => {
+test('initializes kek-v1 only once and creates an automatic backup', () => {
   const { store } = freshStore();
   assert.equal(store.status(), 'UNINITIALIZED');
   const r = store.initialize('test');
@@ -24,7 +24,7 @@ test('inicializa kek-v1 una sola vez y crea respaldo automatico', () => {
   assert.throws(() => store.initialize('test'), { code: 'ALREADY_INITIALIZED' });
 });
 
-test('wrap/unwrap con AAD de contexto', () => {
+test('wrap/unwrap with context AAD', () => {
   const { store } = freshStore();
   store.initialize('test');
   const dek = crypto.randomBytes(32);
@@ -34,7 +34,7 @@ test('wrap/unwrap con AAD de contexto', () => {
   assert.throws(() => store.unwrap({ ...w, context: 'customer:2|dek_ref:a' }, 't'), { code: 'UNWRAP_FAILED' });
 });
 
-test('rotacion: KEK historico sigue desenvolviendo; rewrap migra al activo', () => {
+test('rotation: historical KEK still unwraps; rewrap migrates to the active KEK', () => {
   const { store } = freshStore();
   store.initialize('test');
   const dek = crypto.randomBytes(32);
@@ -47,7 +47,7 @@ test('rotacion: KEK historico sigue desenvolviendo; rewrap migra al activo', () 
   assert.equal(store.unwrap({ ...rw.results[0], context: 'ctx-1' }, 't').dek_b64, dek.toString('base64'));
 });
 
-test('acceso deshabilitado produce un error controlado', () => {
+test('disabled access produces a controlled error', () => {
   const { store } = freshStore();
   store.initialize('test');
   const w = store.wrap(crypto.randomBytes(32).toString('base64'), 'ctx', 't');
@@ -57,7 +57,7 @@ test('acceso deshabilitado produce un error controlado', () => {
   assert.ok(store.unwrap({ ...w, context: 'ctx' }, 't').dek_b64);
 });
 
-test('perdida de keystore: no se regeneran llaves; se recupera desde respaldo', () => {
+test('keystore loss: keys are not regenerated; recovered from backup', () => {
   const { store, cfg } = freshStore();
   store.initialize('test');
   const dek = crypto.randomBytes(32);
@@ -74,7 +74,7 @@ test('perdida de keystore: no se regeneran llaves; se recupera desde respaldo', 
   assert.equal(reloaded.unwrap({ ...w, context: 'ctx' }, 't').dek_b64, dek.toString('base64'));
 });
 
-test('restauracion rechaza un KEK distinto con el mismo kek_id', () => {
+test('restore rejects a different KEK with the same kek_id', () => {
   const a = freshStore();
   a.store.initialize('t');
   const b = freshStore();
@@ -84,9 +84,9 @@ test('restauracion rechaza un KEK distinto con el mismo kek_id', () => {
   assert.throws(() => b.store.restoreFromBackup(backupFile, 't'), { code: 'KEK_CONFLICT' });
 });
 
-test('respaldo con frase de paso incorrecta no se puede descifrar', () => {
+test('a backup with the wrong passphrase cannot be decrypted', () => {
   const a = freshStore();
   a.store.initialize('t');
-  const other = new VaultStore({ ...a.cfg, dataDir: fs.mkdtempSync(path.join(os.tmpdir(), 'vault-x-')), backupPassphrase: 'otra' });
+  const other = new VaultStore({ ...a.cfg, dataDir: fs.mkdtempSync(path.join(os.tmpdir(), 'vault-x-')), backupPassphrase: 'another' });
   assert.throws(() => other.restoreFromBackup(a.store.listBackups()[0].file, 't'), { code: 'BACKUP_DECRYPT_FAILED' });
 });

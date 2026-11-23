@@ -1,8 +1,8 @@
 #!/bin/sh
-# archive_command del laboratorio: copia un segmento WAL al volumen /wal-archive.
-# Uso (lo invoca PostgreSQL): archive-wal.sh %p %f
-# - Nunca sobrescribe un archivo existente con contenido distinto.
-# - Si el archivo ya existe y es identico, responde exito (reintento seguro).
+# Lab archive_command: copies one WAL segment to the /wal-archive volume.
+# Usage (called by PostgreSQL): archive-wal.sh %p %f
+# - Never overwrites an existing file that has different content.
+# - If the file already exists and is identical, it reports success (safe retry).
 set -eu
 src="$1"
 name="$2"
@@ -12,7 +12,7 @@ if [ -f "$dest" ]; then
   if cmp -s "$src" "$dest"; then
     exit 0
   fi
-  echo "archive-wal: $name ya existe en el archivo con contenido distinto; no se sobrescribe" >&2
+  echo "archive-wal: $name already exists in the archive with different content; not overwriting" >&2
   exit 1
 fi
 

@@ -1,37 +1,37 @@
 -- =====================================================================
--- Consultas para DBeaver (cuenta de solo lectura lab_reader)
--- Conexion: 127.0.0.1:5433, base hotel_lab
--- Todas se ejecutan en las pruebas automatizadas (./scripts/test-all.sh).
+-- Queries for DBeaver (read-only account lab_reader)
+-- Connection: 127.0.0.1:5433, database hotel_lab
+-- All of them run in the automated tests (./scripts/test-all.sh).
 -- =====================================================================
 
--- 1. Contar usuarios (total y por rol)
-SELECT count(*) AS total_usuarios FROM users;
-SELECT role, count(*) AS usuarios FROM users GROUP BY role ORDER BY role;
+-- 1. Count users (total and per role)
+SELECT count(*) AS total_users FROM users;
+SELECT role, count(*) AS users FROM users GROUP BY role ORDER BY role;
 
--- 2. Listar 10 clientes
+-- 2. List 10 customers
 SELECT id, customer_code, full_name, status, loyalty_tier
 FROM customers
 ORDER BY id
 LIMIT 10;
 
--- 3. Ciudad y pais (datos operativos, sin cifrado de aplicacion)
-SELECT country, city, count(*) AS clientes
+-- 3. City and country (operational data, no application encryption)
+SELECT country, city, count(*) AS customers
 FROM customers
 GROUP BY country, city
-ORDER BY clientes DESC, city;
+ORDER BY customers DESC, city;
 
--- 4. Inspeccionar el telefono cifrado del cliente 1
+-- 4. Inspect the encrypted phone number of customer 1
 SELECT c.id,
        c.full_name,
        s.encrypted_fields -> 'phone_number' ->> 'ciphertext' AS phone_ciphertext,
        s.encrypted_fields -> 'phone_number' ->> 'nonce'      AS phone_nonce,
        s.encrypted_fields -> 'phone_number' ->> 'tag'        AS phone_tag,
-       s.encrypted_fields -> 'phone_number' ->> 'alg'        AS algoritmo
+       s.encrypted_fields -> 'phone_number' ->> 'alg'        AS algorithm
 FROM customers c
 JOIN customer_sensitive_data s ON s.customer_id = c.id
 WHERE c.id = 1;
 
--- 5. Inspeccionar un campo financiero cifrado (tarjeta de prueba y CLABE)
+-- 5. Inspect an encrypted financial field (test card and CLABE)
 SELECT c.id,
        c.customer_code,
        s.encrypted_fields -> 'card_number' ->> 'ciphertext' AS card_ciphertext,
@@ -41,18 +41,18 @@ FROM customers c
 JOIN customer_sensitive_data s ON s.customer_id = c.id
 WHERE c.id = 1;
 
--- 6. Leer el kek_id de cada cliente y cuantos DEK envuelve cada KEK
+-- 6. Read each customer's kek_id and how many DEKs each KEK wraps
 SELECT customer_id, kek_id, dek_ref
 FROM customer_keys
 ORDER BY customer_id
 LIMIT 10;
 
-SELECT kek_id, count(*) AS clientes
+SELECT kek_id, count(*) AS customers
 FROM customer_keys
 GROUP BY kek_id
 ORDER BY kek_id;
 
--- 7. Inspeccionar un DEK envuelto (32 bytes de DEK cifrados con el KEK)
+-- 7. Inspect a wrapped DEK (32 bytes of DEK encrypted with the KEK)
 SELECT customer_id,
        dek_ref,
        wrapped_dek,
@@ -65,7 +65,7 @@ SELECT customer_id,
 FROM customer_keys
 WHERE customer_id = 1;
 
--- 8. Relacion usuario -> cliente -> datos cifrados -> llave envuelta
+-- 8. Relationship user -> customer -> encrypted data -> wrapped key
 SELECT
     u.id AS user_id,
     u.username,
@@ -83,41 +83,41 @@ JOIN customer_keys k ON k.customer_id = c.id
 ORDER BY c.id
 LIMIT 10;
 
--- 9. Contar reservaciones (total y por estado)
-SELECT count(*) AS total_reservaciones FROM reservations;
-SELECT status, count(*) AS reservaciones FROM reservations GROUP BY status ORDER BY status;
+-- 9. Count reservations (total and per status)
+SELECT count(*) AS total_reservations FROM reservations;
+SELECT status, count(*) AS reservations FROM reservations GROUP BY status ORDER BY status;
 
--- 10. Confirmar que el ciphertext sigue en PostgreSQL aunque el Key Vault no este disponible
---     (ejecutela con el Key Vault detenido: PostgreSQL no depende de el)
-SELECT count(*) AS perfiles_cifrados,
-       count(*) FILTER (WHERE encrypted_fields ? 'phone_number') AS con_telefono_cifrado,
-       min((SELECT count(*) FROM jsonb_object_keys(encrypted_fields))) AS campos_minimos,
-       max((SELECT count(*) FROM jsonb_object_keys(encrypted_fields))) AS campos_maximos
+-- 10. Confirm the ciphertext is still in PostgreSQL even when the Key Vault is unavailable
+--     (run it with the Key Vault stopped: PostgreSQL does not depend on it)
+SELECT count(*) AS encrypted_profiles,
+       count(*) FILTER (WHERE encrypted_fields ? 'phone_number') AS with_encrypted_phone,
+       min((SELECT count(*) FROM jsonb_object_keys(encrypted_fields))) AS min_fields,
+       max((SELECT count(*) FROM jsonb_object_keys(encrypted_fields))) AS max_fields
 FROM customer_sensitive_data;
 
--- 11. Demostrar que PostgreSQL no guarda KEK: la unica columna relacionada es la referencia kek_id
+-- 11. Show that PostgreSQL stores no KEK: the only related column is the kek_id reference
 SELECT table_name, column_name, data_type
 FROM information_schema.columns
 WHERE table_schema = 'public' AND (column_name ILIKE '%kek%' OR column_name ILIKE '%dek%')
 ORDER BY table_name, column_name;
 
--- 12. Vista de apoyo con metadatos de cifrado
+-- 12. Helper view with encryption metadata
 SELECT * FROM v_customer_encryption_overview ORDER BY customer_id LIMIT 5;
 
--- 13. Estado del servidor: primario o standby, linea de tiempo y nombre
-SELECT current_setting('cluster_name') AS servidor,
-       pg_is_in_recovery() AS es_standby,
+-- 13. Server state: primary or standby, timeline and name
+SELECT current_setting('cluster_name') AS server,
+       pg_is_in_recovery() AS is_standby,
        (SELECT timeline_id FROM pg_control_checkpoint()) AS timeline;
 
--- 14. Laboratorio 1: replicacion vista desde el primario (vacia si se ejecuta en el standby)
+-- 14. Lab 1: replication seen from the primary (empty when run on the standby)
 SELECT application_name, client_addr, state, sync_state, replay_lsn
 FROM pg_stat_replication;
 
--- 15. Laboratorio 2: archivado de WAL
+-- 15. Lab 2: WAL archiving
 SELECT archived_count, last_archived_wal, last_archived_time, failed_count
 FROM pg_stat_archiver;
 
--- 16. Ultimos eventos de auditoria (nunca contienen valores sensibles)
+-- 16. Latest audit events (they never contain sensitive values)
 SELECT occurred_at, actor_username, action, target_type, target_id, outcome
 FROM audit_events
 ORDER BY occurred_at DESC

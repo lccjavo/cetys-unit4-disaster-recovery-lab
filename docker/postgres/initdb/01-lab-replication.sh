@@ -1,7 +1,7 @@
 #!/bin/bash
-# Se ejecuta una sola vez, cuando el volumen del primario esta vacio.
-# Crea el rol de replicacion y permite conexiones de replicacion desde la red de Docker.
-# Los roles de la aplicacion (hotel_app, lab_reader) los crea ./scripts/migrate.sh.
+# Runs only once, when the primary volume is empty.
+# Creates the replication role and allows replication connections from the Docker network.
+# The application roles (hotel_app, lab_reader) are created by ./scripts/migrate.sh.
 set -euo pipefail
 
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" \
@@ -11,4 +11,4 @@ WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'repl_user') \gexec
 SQL
 
 echo "host replication ${REPLICATION_USER:-replicator} all scram-sha-256" >> "$PGDATA/pg_hba.conf"
-echo "[initdb] Rol de replicacion creado y pg_hba.conf actualizado"
+echo "[initdb] Replication role created and pg_hba.conf updated"

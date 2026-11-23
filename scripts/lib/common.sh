@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Funciones comunes para los scripts del laboratorio.
-# Uso: source "$(dirname "$0")/lib/common.sh"
+# Shared functions for the lab scripts.
+# Usage: source "$(dirname "$0")/lib/common.sh"
 
 set -euo pipefail
 
@@ -15,13 +15,13 @@ fi
 
 info()  { echo "${C_CYN}==>${C_OFF} $*"; }
 ok()    { echo "${C_GRN}OK${C_OFF}  $*"; }
-warn()  { echo "${C_YEL}AVISO${C_OFF} $*" >&2; }
+warn()  { echo "${C_YEL}WARNING${C_OFF} $*" >&2; }
 fail()  { echo "${C_RED}ERROR${C_OFF} $*" >&2; exit 1; }
 title() { echo; echo "${C_BLD}$*${C_OFF}"; }
 
-# Carga .env sin sobrescribir variables ya definidas en el entorno
-# (asi las pruebas pueden usar otro COMPOSE_PROJECT_NAME y otros puertos).
-# LAB_ENV_FILE permite usar otro archivo (lo usa test-all.sh para un proyecto aislado).
+# Loads .env without overriding variables already set in the environment
+# (so the tests can use another COMPOSE_PROJECT_NAME and other ports).
+# LAB_ENV_FILE selects a different file (test-all.sh uses it for an isolated project).
 ENV_FILE="${LAB_ENV_FILE:-$REPO_ROOT/.env}"
 if [ -n "${LAB_ENV_FILE:-}" ]; then export COMPOSE_ENV_FILES="$LAB_ENV_FILE"; fi
 
@@ -44,16 +44,16 @@ load_env() {
 }
 
 require_env_file() {
-  [ -f "$ENV_FILE" ] || fail "No existe $ENV_FILE. Ejecute primero: ./scripts/setup-env.sh"
+  [ -f "$ENV_FILE" ] || fail "$ENV_FILE does not exist. Run first: ./scripts/setup-env.sh"
 }
 
 require_docker() {
-  command -v docker >/dev/null 2>&1 || fail "Docker no esta instalado o no esta en el PATH."
-  docker info >/dev/null 2>&1 || fail "El daemon de Docker no esta corriendo. Abra Docker Desktop (o 'sudo systemctl start docker') y reintente."
-  docker compose version >/dev/null 2>&1 || fail "Docker Compose v2 no esta disponible ('docker compose version' fallo)."
+  command -v docker >/dev/null 2>&1 || fail "Docker is not installed or not on the PATH."
+  docker info >/dev/null 2>&1 || fail "The Docker daemon is not running. Open Docker Desktop (or 'sudo systemctl start docker') and retry."
+  docker compose version >/dev/null 2>&1 || fail "Docker Compose v2 is not available ('docker compose version' failed)."
 }
 
-# Docker Compose siempre con los perfiles de laboratorio que se indiquen en DC_PROFILES.
+# Docker Compose with the lab profiles listed in DC_PROFILES.
 dc() {
   local args=()
   for p in ${DC_PROFILES:-}; do args+=(--profile "$p"); done
@@ -77,15 +77,15 @@ wait_healthy() {
     st="$(service_health "$svc")"
     [ "$st" = "healthy" ] && return 0
     if [ "$waited" -ge "$timeout" ]; then
-      warn "$svc no esta healthy despues de ${timeout}s (estado: $st). Revise: docker compose logs $svc"
+      warn "$svc is not healthy after ${timeout}s (status: $st). Check: docker compose logs $svc"
       return 1
     fi
     sleep 2; waited=$((waited + 2))
   done
 }
 
-# Ejecuta SQL como administrador dentro del contenedor indicado (por socket local).
-# Uso: pg_sql <servicio> "<sql>"
+# Runs SQL as the administrator inside the given container (local socket).
+# Usage: pg_sql <service> "<sql>"
 pg_sql() {
   local svc="$1"; shift
   printf '%s\n' "$*" | docker compose --profile lab1 --profile lab2 exec -T -u postgres "$svc" \
@@ -96,7 +96,7 @@ in_recovery() {
   pg_sql "$1" "SELECT pg_is_in_recovery()" 2>/dev/null | tr -d '[:space:]'
 }
 
-# Escribe en el volumen lab-control a traves de un contenedor en ejecucion.
+# Writes to the lab-control volume through a running container.
 control_write() {
   local svc="$1" file="$2" content="$3"
   printf '%s' "$content" | docker compose --profile lab1 --profile lab2 exec -T "$svc" sh -c "cat > /lab-control/$file && chmod 0666 /lab-control/$file"
@@ -110,7 +110,7 @@ control_read() {
   docker compose --profile lab1 --profile lab2 exec -T "$svc" sh -c "cat /lab-control/$file 2>/dev/null" || true
 }
 
-# Servidor al que apunta la aplicacion (archivo /lab-control/db-target o postgres-primary).
+# Server the application points to (file /lab-control/db-target, or postgres-primary).
 current_target() {
   local svc t=""
   for svc in hotel-app postgres-primary postgres-standby postgres-recovery; do
@@ -122,7 +122,7 @@ current_target() {
   echo "${t:-postgres-primary}"
 }
 
-# Servidor primario escribible actual (el objetivo de la app si es escribible).
+# Current writable primary (the app target if it is writable).
 current_primary() {
   local t
   t="$(current_target)"
@@ -144,9 +144,9 @@ http_code() {
 confirm() {
   local prompt="$1" word="$2" answer
   if [ "${ASSUME_YES:-false}" = "true" ]; then return 0; fi
-  if [ ! -t 0 ]; then fail "Se requiere confirmacion interactiva (o use --yes)."; fi
-  read -r -p "$prompt Escriba $word para continuar: " answer
-  [ "$answer" = "$word" ] || fail "Operacion cancelada."
+  if [ ! -t 0 ]; then fail "Interactive confirmation is required (or use --yes)."; fi
+  read -r -p "$prompt Type $word to continue: " answer
+  [ "$answer" = "$word" ] || fail "Operation cancelled."
 }
 
 now_epoch() { date +%s; }

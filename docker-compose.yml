@@ -1,12 +1,12 @@
-# CETYS Unidad 4: Hotel Management + Key Vault + PostgreSQL 17 (HA y PITR).
+# CETYS Unit 4: Hotel Management + Key Vault + PostgreSQL 17 (HA and PITR).
 #
-# Perfil por defecto : postgres-primary, key-vault, hotel-app
-# Perfil lab1        : + postgres-standby  (replicacion fisica por streaming)
-# Perfil lab2        : + postgres-recovery (instancia de Point-in-Time Recovery)
+# Default profile : postgres-primary, key-vault, hotel-app
+# Profile lab1    : + postgres-standby  (physical streaming replication)
+# Profile lab2    : + postgres-recovery (Point-in-Time Recovery instance)
 #
-# Todos los valores tienen un respaldo (${VAR:-defecto}) para que `docker compose build`
-# funcione sin .env. Para clase ejecute ./scripts/setup-env.sh y se generan secretos locales.
-# Todos los puertos se publican solo en 127.0.0.1.
+# Every value has a fallback (${VAR:-default}) so `docker compose build` works
+# without .env. For class, run ./scripts/setup-env.sh to generate local secrets.
+# All ports are published on 127.0.0.1 only.
 
 x-postgres-env: &postgres-env
   POSTGRES_DB: ${POSTGRES_DB:-hotel_lab}
@@ -104,8 +104,8 @@ services:
       VAULT_BACKUP_PASSPHRASE: ${VAULT_BACKUP_PASSPHRASE:-lab-default-backup-passphrase}
       LAB_MODE: ${LAB_MODE:-true}
       NODE_ENV: ${NODE_ENV:-production}
-    # Solo se publica la GUI (3001) en localhost. La API criptografica (8200) queda
-    # dentro de la red de Docker y nunca se expone al equipo anfitrion.
+    # Only the GUI (3001) is published on localhost. The cryptographic API (8200) stays
+    # inside the Docker network and is never exposed to the host.
     ports:
       - "127.0.0.1:${KEY_VAULT_APP_PORT:-3001}:3001"
     expose:
@@ -141,7 +141,7 @@ services:
       HOTEL_SESSION_SECRET: ${HOTEL_SESSION_SECRET:-lab-default-hotel-session-secret}
       HOTEL_DEMO_ADMIN_PASSWORD: ${HOTEL_DEMO_ADMIN_PASSWORD:-Admin2026!}
       HOTEL_DEMO_STAFF_PASSWORD: ${HOTEL_DEMO_STAFF_PASSWORD:-Staff2026!}
-      HOTEL_DEMO_CUSTOMER_PASSWORD: ${HOTEL_DEMO_CUSTOMER_PASSWORD:-Cliente2026!}
+      HOTEL_DEMO_CUSTOMER_PASSWORD: ${HOTEL_DEMO_CUSTOMER_PASSWORD:-Customer2026!}
       AUTO_INIT: ${AUTO_INIT:-true}
       LAB_MODE: ${LAB_MODE:-true}
       NODE_ENV: ${NODE_ENV:-production}

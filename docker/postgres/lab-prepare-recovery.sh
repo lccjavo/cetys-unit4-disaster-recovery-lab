@@ -1,9 +1,9 @@
 #!/bin/bash
-# Prepara el volumen de la instancia postgres-recovery para Point-in-Time Recovery.
-# Solo opera sobre el volumen desechable de recuperacion; nunca toca el primario,
-# los respaldos ni el archivo WAL (ambos se montan en solo lectura).
+# Prepares the postgres-recovery instance volume for Point-in-Time Recovery.
+# It only touches the disposable recovery volume; it never touches the primary,
+# the backups or the WAL archive (both are mounted read-only).
 #
-# Uso: lab-prepare-recovery.sh --name <restore_point> | --time "<timestamp>" [--backup <base-...>]
+# Usage: lab-prepare-recovery.sh --name <restore_point> | --time "<timestamp>" [--backup <base-...>]
 set -euo pipefail
 
 PGDATA="${PGDATA:-/var/lib/postgresql/data}"
@@ -16,20 +16,20 @@ while [ $# -gt 0 ]; do
     --name) TARGET_NAME="$2"; shift 2 ;;
     --time) TARGET_TIME="$2"; shift 2 ;;
     --backup) BACKUP="$2"; shift 2 ;;
-    *) echo "Argumento desconocido: $1" >&2; exit 2 ;;
+    *) echo "Unknown argument: $1" >&2; exit 2 ;;
   esac
 done
 
 if [ "${LAB_PG_ROLE:-}" != "recovery" ]; then
-  echo "ERROR: este script solo se ejecuta en el servicio postgres-recovery" >&2
+  echo "ERROR: this script only runs in the postgres-recovery service" >&2
   exit 1
 fi
 if [ -z "$TARGET_NAME" ] && [ -z "$TARGET_TIME" ]; then
-  echo "ERROR: indique --name o --time" >&2
+  echo "ERROR: specify --name or --time" >&2
   exit 2
 fi
 
-# Momento de referencia del objetivo, para elegir un respaldo anterior a el.
+# Reference time of the target, used to pick a backup taken before it.
 TARGET_EPOCH=""
 if [ -n "$TARGET_NAME" ]; then
   if [ -f /lab-control/restore-points.log ]; then
@@ -39,8 +39,8 @@ if [ -n "$TARGET_NAME" ]; then
     fi
   fi
   if [ -z "$TARGET_EPOCH" ]; then
-    echo "AVISO: el punto '$TARGET_NAME' no aparece en /lab-control/restore-points.log;"
-    echo "       se usara el respaldo mas reciente."
+    echo "WARNING: restore point '$TARGET_NAME' is not in /lab-control/restore-points.log;"
+    echo "         the most recent backup will be used."
   fi
 else
   TARGET_EPOCH=$(date -u -d "$TARGET_TIME" +%s)
@@ -59,24 +59,24 @@ if [ -z "$BACKUP" ]; then
 fi
 
 if [ -z "$BACKUP" ] || [ ! -f "/backups/$BACKUP/backup_label" ]; then
-  echo "ERROR: no hay un respaldo base verificado anterior al objetivo de recuperacion." >&2
-  echo "       Cree uno con ./scripts/backup.sh db ANTES de crear el punto de restauracion." >&2
+  echo "ERROR: there is no verified base backup taken before the recovery target." >&2
+  echo "       Create one with ./scripts/backup.sh db BEFORE creating the restore point." >&2
   exit 1
 fi
 
-echo "Respaldo base seleccionado: $BACKUP"
-echo "Limpiando el volumen desechable de recuperacion: $PGDATA"
+echo "Selected base backup: $BACKUP"
+echo "Cleaning the disposable recovery volume: $PGDATA"
 mkdir -p "$PGDATA"
 find "$PGDATA" -mindepth 1 -delete
 
-echo "Copiando el respaldo base..."
+echo "Copying the base backup..."
 cp -a "/backups/$BACKUP/." "$PGDATA/"
 rm -f "$PGDATA/standby.signal" "$PGDATA/postmaster.pid" "$PGDATA/backup_manifest"
 touch "$PGDATA/recovery.signal"
 
 {
   echo ""
-  echo "# ---- Configuracion de PITR escrita por lab-prepare-recovery.sh ----"
+  echo "# ---- PITR configuration written by lab-prepare-recovery.sh ----"
   echo "restore_command = 'cp /wal-archive/%f %p'"
   echo "primary_conninfo = ''"
   echo "primary_slot_name = ''"
@@ -102,4 +102,4 @@ cat > /lab-control/last-restore.json <<JSON
 }
 JSON
 chmod 0644 /lab-control/last-restore.json
-echo "PREPARADO=$BACKUP"
+echo "PREPARED=$BACKUP"

@@ -1,9 +1,9 @@
 'use strict';
 
 /**
- * Informacion de estado para el panel, la pagina de seguridad y la de recuperacion.
- * Cada consulta tolera fallas: si PostgreSQL o el Key Vault no responden,
- * se devuelve lo que si se pudo obtener y el error correspondiente.
+ * Status information for the dashboard, the security page and the recovery page.
+ * Every query tolerates failures: if PostgreSQL or the Key Vault do not respond,
+ * whatever could be collected is returned along with the corresponding error.
  */
 
 const fs = require('node:fs');
@@ -85,7 +85,7 @@ function readJsonFiles(dir) {
         try {
           return JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
         } catch {
-          return { name: f, error: 'ilegible' };
+          return { name: f, error: 'unreadable' };
         }
       });
   } catch {
@@ -145,7 +145,7 @@ function controlFiles() {
   try {
     lastRestore = JSON.parse(fs.readFileSync(path.join(cfg.paths.control, 'last-restore.json'), 'utf8'));
   } catch {
-    /* sin restauraciones */
+    /* no restores yet */
   }
   const fenced = fs.existsSync(path.join(cfg.paths.control, 'primary.fenced'));
   return { restorePoints, targets, failovers, lastRestore, fenced };
@@ -174,7 +174,7 @@ async function disasterRecovery() {
   };
 }
 
-/** Verifica el estado tras una recuperacion: conteos + descifrado de una muestra. */
+/** Verifies the state after a recovery: counts + decryption of a sample. */
 async function verifyRecovery(sampleSize = 10) {
   const c = await counts();
   const { rows } = await db.query(
@@ -204,7 +204,7 @@ async function verifyRecovery(sampleSize = 10) {
   return { outcome, customers: c.customers, reservations: c.reservations, sampled: rows.length, ok, errors, server };
 }
 
-/** Re-envuelve los DEK que no usan el KEK activo (el DEK nunca sale del Key Vault). */
+/** Re-wraps the DEKs that do not use the active KEK (the DEK never leaves the Key Vault). */
 async function rewrapAll() {
   const vs = await vault.status();
   const { rows } = await db.query(

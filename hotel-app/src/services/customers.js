@@ -88,10 +88,10 @@ async function getByUserId(userId) {
   return rows[0] ? getById(rows[0].id) : null;
 }
 
-/** Descifra solo los campos solicitados y autorizados. */
+/** Decrypts only the requested and authorized fields. */
 async function reveal(customer, fields) {
   if (!customer.encrypted_fields || !customer.wrapped_dek) {
-    const err = new Error('El cliente no tiene datos cifrados o DEK asociado.');
+    const err = new Error('The customer has no encrypted data or associated DEK.');
     err.code = 'NO_ENCRYPTED_DATA';
     err.status = 404;
     throw err;
@@ -113,19 +113,19 @@ function validateNew(body) {
   const fullName = String(body.full_name || '').trim();
   const username = String(body.username || '').trim().toLowerCase();
   const password = String(body.password || '');
-  if (fullName.length < 3) errors.push('El nombre completo es obligatorio.');
-  if (!/^[a-z0-9._-]+@[a-z0-9.-]+\.test$/.test(username)) errors.push('El usuario debe ser un correo ficticio con dominio .test (por ejemplo, nuevo.cliente@hotel-lab.test).');
-  if (password.length < 10) errors.push('La contrasena debe tener al menos 10 caracteres.');
-  if (!CUSTOMER_STATUSES.includes(body.status)) errors.push('Estado de cliente invalido.');
+  if (fullName.length < 3) errors.push('Full name is required.');
+  if (!/^[a-z0-9._-]+@[a-z0-9.-]+\.test$/.test(username)) errors.push('The username must be a fictional email with a .test domain (for example, new.customer@hotel-lab.test).');
+  if (password.length < 10) errors.push('The password must be at least 10 characters long.');
+  if (!CUSTOMER_STATUSES.includes(body.status)) errors.push('Invalid customer status.');
   const operational = parseOperational(body);
   for (const f of OPERATIONAL_FIELDS) {
-    if (f.type !== 'bool' && !operational[f.key]) errors.push(`Falta el campo operativo: ${f.label}.`);
-    if (f.options && operational[f.key] && !f.options.includes(operational[f.key])) errors.push(`Valor no permitido para ${f.label}.`);
+    if (f.type !== 'bool' && !operational[f.key]) errors.push(`Missing operational field: ${f.label}.`);
+    if (f.options && operational[f.key] && !f.options.includes(operational[f.key])) errors.push(`Value not allowed for ${f.label}.`);
   }
   const sensitive = {};
   for (const key of SENSITIVE_KEYS) {
     sensitive[key] = String(body[key] || '').trim().slice(0, 300);
-    if (!sensitive[key]) errors.push(`Falta el campo sensible: ${key}.`);
+    if (!sensitive[key]) errors.push(`Missing sensitive field: ${key}.`);
   }
   return { errors, value: { fullName, username, password, status: body.status, operational, sensitive } };
 }
@@ -133,15 +133,15 @@ function validateNew(body) {
 async function create(value) {
   const exists = await db.query('SELECT 1 FROM users WHERE username = $1', [value.username]);
   if (exists.rowCount) {
-    const err = new Error('Ya existe una cuenta con ese usuario.');
+    const err = new Error('An account with that username already exists.');
     err.status = 409;
     err.code = 'DUPLICATE';
     throw err;
   }
-  // Comprobar el Key Vault antes de abrir la transaccion: sin Key Vault no se guarda nada.
+  // Check the Key Vault before opening the transaction: without the Key Vault nothing is stored.
   const vh = await vault.health({ fresh: true });
   if (!vh.available || vh.vault_status !== 'READY' || vh.access_disabled) {
-    const err = new Error('No se puede crear el cliente: el Key Vault no esta disponible para envolver el DEK. Nunca se guardan datos sensibles sin cifrar.');
+    const err = new Error('Cannot create the customer: the Key Vault is not available to wrap the DEK. Sensitive data is never stored unencrypted.');
     err.status = 503;
     err.code = vh.access_disabled ? 'KEY_ACCESS_DISABLED' : 'VAULT_UNAVAILABLE';
     throw err;

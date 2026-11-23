@@ -2,7 +2,7 @@
   "name": "cetys-hotel-app",
   "version": "1.0.0",
   "private": true,
-  "description": "Hotel Management App (CETYS Unidad 4) con cifrado de sobre AES-256-GCM",
+  "description": "Hotel Management App (CETYS Unit 4) with AES-256-GCM envelope encryption",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",

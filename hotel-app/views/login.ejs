@@ -5,34 +5,34 @@
       <div class="text-center mb-4">
         <div class="stat-card"><span class="stat-icon mb-2"><i class="bi bi-building"></i></span></div>
         <h1 class="h4 mb-1">Hotel Lab CETYS</h1>
-        <p class="text-secondary small mb-0">Gestión de clientes y reservaciones con cifrado de sobre</p>
+        <p class="text-secondary small mb-0">Customer and reservation management with envelope encryption</p>
       </div>
       <% if (error) { %><div class="alert alert-danger py-2 small" role="alert"><%= error %></div><% } %>
-      <% if (dbHealth.status === 'down') { %><div class="alert alert-warning py-2 small"><i class="bi bi-database-x me-1"></i>Base de datos no disponible (<%= dbHealth.target %>).</div><% } %>
+      <% if (dbHealth.status === 'down') { %><div class="alert alert-warning py-2 small"><i class="bi bi-database-x me-1"></i>Database unavailable (<%= dbHealth.target %>).</div><% } %>
       <form method="post" action="/login" class="needs-validation" novalidate>
         <input type="hidden" name="_csrf" value="<%= csrf %>">
         <input type="hidden" name="next" value="<%= next %>">
         <div class="mb-3">
-          <label for="username" class="form-label">Usuario (correo)</label>
+          <label for="username" class="form-label">Username (email)</label>
           <input id="username" name="username" type="email" class="form-control" required autocomplete="username" value="<%= username %>" placeholder="admin@hotel-lab.test">
-          <div class="invalid-feedback">Capture un correo válido.</div>
+          <div class="invalid-feedback">Enter a valid email.</div>
         </div>
         <div class="mb-4">
-          <label for="password" class="form-label">Contraseña</label>
+          <label for="password" class="form-label">Password</label>
           <input id="password" name="password" type="password" class="form-control" required autocomplete="current-password">
-          <div class="invalid-feedback">Capture la contraseña.</div>
+          <div class="invalid-feedback">Enter the password.</div>
         </div>
-        <button class="btn btn-primary w-100" type="submit" data-loading-text="Verificando..."><i class="bi bi-box-arrow-in-right me-1"></i>Iniciar sesión</button>
+        <button class="btn btn-primary w-100" type="submit" data-loading-text="Verifying..."><i class="bi bi-box-arrow-in-right me-1"></i>Sign in</button>
       </form>
       <% if (labMode) { %>
       <div class="mt-4 small">
-        <p class="fw-semibold mb-1">Cuentas de demostración (datos ficticios):</p>
+        <p class="fw-semibold mb-1">Demo accounts (fictional data):</p>
         <ul class="mb-0 text-secondary">
-          <li><code>admin@hotel-lab.test</code> (administrador)</li>
-          <li><code>recepcion@hotel-lab.test</code> (personal)</li>
-          <li><code>cliente001@hotel-lab.test</code> (cliente)</li>
+          <li><code>admin@hotel-lab.test</code> (administrator)</li>
+          <li><code>frontdesk@hotel-lab.test</code> (staff)</li>
+          <li><code>customer001@hotel-lab.test</code> (customer)</li>
         </ul>
-        <p class="text-secondary mb-0 mt-1">Las contraseñas están en el README.</p>
+        <p class="text-secondary mb-0 mt-1">The passwords are listed in the README.</p>
       </div>
       <% } %>
     </div>
