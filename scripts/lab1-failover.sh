@@ -51,7 +51,9 @@ for i in $(seq 1 30); do
 done
 [ "$(in_recovery postgres-standby)" = "f" ] || fail "The standby is still in recovery."
 T1="$(now_epoch)"
-TL="$(pg_sql postgres-standby "SELECT timeline_id FROM pg_control_checkpoint()")"
+# Read the timeline from the current WAL segment name: pg_control_checkpoint() keeps
+# reporting the old timeline until the end-of-recovery checkpoint finishes.
+TL="$(pg_sql postgres-standby "SELECT ('x' || substr(pg_walfile_name(pg_current_wal_lsn()), 1, 8))::bit(32)::int")"
 ok "postgres-standby is the new primary (timeline $TL) after $((T1 - T0)) s"
 
 PREV="$(current_target)"

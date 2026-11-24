@@ -261,7 +261,12 @@ const SERVER_INFO_SQL = `
          current_database() AS database,
          to_char(pg_postmaster_start_time(), 'YYYY-MM-DD"T"HH24:MI:SSOF') AS started_at,
          (SELECT system_identifier::text FROM pg_control_system()) AS system_identifier,
-         (SELECT timeline_id FROM pg_control_checkpoint()) AS timeline,
+         -- On a primary, read the timeline from the current WAL segment: right after a
+         -- promotion pg_control_checkpoint() still shows the old timeline for a few seconds.
+         CASE WHEN pg_is_in_recovery()
+              THEN (SELECT timeline_id FROM pg_control_checkpoint())
+              ELSE ('x' || substr(pg_walfile_name(pg_current_wal_lsn()), 1, 8))::bit(32)::int
+         END AS timeline,
          now() AS server_time`;
 
 const STANDBY_SQL = `

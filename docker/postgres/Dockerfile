@@ -4,7 +4,9 @@ FROM postgres:17-bookworm
 COPY lab-entrypoint.sh archive-wal.sh lab-basebackup.sh lab-prepare-recovery.sh /usr/local/bin/
 COPY initdb/ /docker-entrypoint-initdb.d/
 
-RUN chmod 0755 /usr/local/bin/lab-entrypoint.sh /usr/local/bin/archive-wal.sh \
+# Strip CR characters in case the repository was checked out with CRLF (Git for Windows).
+RUN sed -i 's/\r$//' /usr/local/bin/lab-*.sh /usr/local/bin/archive-wal.sh /docker-entrypoint-initdb.d/*.sh \
+    && chmod 0755 /usr/local/bin/lab-entrypoint.sh /usr/local/bin/archive-wal.sh \
         /usr/local/bin/lab-basebackup.sh /usr/local/bin/lab-prepare-recovery.sh \
     && chmod 0755 /docker-entrypoint-initdb.d/*.sh \
     && mkdir -p /wal-archive /backups/catalog /lab-control \
