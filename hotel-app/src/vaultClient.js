@@ -20,6 +20,7 @@ const MESSAGES = {
   VAULT_UNAVAILABLE: 'Key Vault unavailable: encrypted fields are temporarily unreadable.',
   KEY_ACCESS_DISABLED: 'Key access is disabled in the Key Vault.',
   KEK_NOT_FOUND: 'KEK not found in the Key Vault. The encrypted data is preserved but cannot be decrypted until the KEK is recovered.',
+  KEK_OWNER_MISMATCH: 'The kek_id stored for this customer belongs to another customer. The Key Vault refused to unwrap the DEK.',
   UNWRAP_FAILED: 'Wrapped DEK authentication failed (wrong KEK or tampered data).',
   UNAUTHORIZED: 'The Key Vault rejected the hotel service token.',
 };
@@ -75,14 +76,19 @@ module.exports = {
   lastHealth,
   status: () => call('GET', '/api/v1/status'),
   initialize: () => call('POST', '/api/v1/admin/initialize'),
-  wrapDek: (dek, context) => call('POST', '/api/v1/wrap', { dek_b64: dek.toString('base64'), context }),
-  unwrapDek: (meta, context) =>
+  backup: (reason) => call('POST', '/api/v1/admin/backup', { reason }),
+  // owner = customer code (CUS-0001). The Key Vault wraps with THAT customer's active KEK,
+  // creating the customer's first KEK (kek-cus-0001-v1) if it does not exist yet.
+  wrapDek: (dek, context, owner) => call('POST', '/api/v1/wrap', { dek_b64: dek.toString('base64'), context, owner }),
+  // The Key Vault rejects the unwrap if kek_id does not belong to this owner (KEK_OWNER_MISMATCH).
+  unwrapDek: (meta, context, owner) =>
     call('POST', '/api/v1/unwrap', {
       kek_id: meta.kek_id,
       wrapped_dek: meta.wrapped_dek,
       nonce: meta.dek_wrap_nonce,
       tag: meta.dek_wrap_tag,
       context,
+      owner,
     }),
   rewrap: (items) => call('POST', '/api/v1/rewrap', { items }),
 };

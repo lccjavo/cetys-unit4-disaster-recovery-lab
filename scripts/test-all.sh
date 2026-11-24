@@ -107,7 +107,7 @@ t "docker compose build without an .env file" $rc
 out="$(docker run --rm cetys-dr/hotel-app:1.0 sh -c 'node --test test/*.test.js' 2>&1)"; rc=$?
 t "hotel-app unit tests (AES-256-GCM, AAD, generator, authorization)" $rc "$(echo "$out" | grep -E '^ℹ (pass|fail)' | tr '\n' ' ')"
 out="$(docker run --rm cetys-dr/key-vault:1.0 sh -c 'node --test test/*.test.js' 2>&1)"; rc=$?
-t "key-vault unit tests (wrap, rotation, backup, loss, conflict)" $rc "$(echo "$out" | grep -E '^ℹ (pass|fail)' | tr '\n' ' ')"
+t "key-vault unit tests (per-customer KEK, owner check, rotation, shred, backup, loss)" $rc "$(echo "$out" | grep -E '^ℹ (pass|fail)' | tr '\n' ' ')"
 
 # ------------------------------------------------------------- first run
 section "First run"
@@ -177,8 +177,10 @@ v="$(db "SELECT count(*) FROM customer_sensitive_data WHERE (SELECT count(*) FRO
 [ "$v" = 150 ]; t "The 20 sensitive fields are encrypted in all 150 profiles" $?
 v="$(db "SELECT count(*) FROM information_schema.columns WHERE table_name='customers' AND column_name IN ('display_nickname','city','country','preferred_language','time_zone','preferred_currency','preferred_room_category','preferred_bed_type','preferred_floor','preferred_room_view','preferred_pillow_type','preferred_checkin_time','preferred_checkout_time','breakfast_preference','parking_required','wifi_usage_preference','newsletter_opt_in','loyalty_tier','preferred_contact_channel','favorite_amenity')")"
 [ "$v" = 20 ]; t "The 20 operational fields are stored as separate columns" $?
-v="$(db "SELECT count(DISTINCT wrapped_dek) || '/' || count(DISTINCT dek_ref) || '/' || count(*) || '/' || string_agg(DISTINCT kek_id, ',') FROM customer_keys")"
-[ "$v" = "150/150/150/kek-v1" ]; t "Every customer has a unique DEK wrapped with kek-v1" $? "$v"
+v="$(db "SELECT count(DISTINCT k.wrapped_dek) || '/' || count(DISTINCT k.dek_ref) || '/' || count(DISTINCT k.kek_id) || '/' || count(*) FILTER (WHERE k.kek_id = 'kek-' || lower(c.customer_code) || '-v1') || '/' || count(*) FROM customer_keys k JOIN customers c ON c.id = k.customer_id")"
+[ "$v" = "150/150/150/150/150" ]; t "Every customer has a unique DEK wrapped with its OWN KEK (kek-cus-NNNN-v1)" $? "dek/ref/distinct kek/own kek/total=$v"
+v="$(vault_cli status 2>/dev/null | grep -E '^  "owner_count"' | tr -dc '0-9')"
+[ "$v" = 150 ]; t "The Key Vault holds one KEK per customer (150 owners)" $? "owners=$v"
 v="$(db "SELECT count(*) FROM customer_keys WHERE length(decode(wrapped_dek,'base64')) <> 32 OR length(decode(dek_wrap_nonce,'base64')) <> 12 OR length(decode(dek_wrap_tag,'base64')) <> 16")"
 [ "$v" = 0 ]; t "Wrapped DEKs use the correct AES-256-GCM format (32 B, 12 B nonce, 16 B tag)" $?
 
@@ -211,11 +213,23 @@ docker compose start key-vault >/dev/null 2>&1; wait_healthy key-vault 60; sleep
 r="$(reveal admin 1 '["phone_number"]')"; [ "${r%% *}" = 200 ]; t "Restarting the Key Vault brings decryption back" $?
 vault_cli outage enable >/dev/null 2>&1; r="$(reveal admin 1 '["phone_number"]')"; vault_cli outage disable >/dev/null 2>&1
 [ "${r%% *}" = 503 ]; t "Simulated Key Vault outage produces a controlled 503" $?
-vault_cli rotate >/dev/null 2>&1
+vault_cli rotate CUS-0001 >/dev/null 2>&1
+act="$(vault_cli status 2>/dev/null | js "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const o=JSON.parse(s);const a=o.keks.filter(k=>k.status==='active');process.stdout.write(a.find(k=>k.owner==='CUS-0001').kek_id+'/'+a.find(k=>k.owner==='CUS-0002').kek_id)})")"
+r="$(reveal admin 1 '["clabe"]')"
+[ "$act" = "kek-cus-0001-v2/kek-cus-0002-v1" ] && [ "${r%% *}" = 200 ]; t "Rotating one customer: CUS-0001 gets v2, CUS-0002 untouched, v1 still unwraps" $? "active=$act"
 NEWC="$(create_customer admin)"
-k="$(db "SELECT kek_id FROM customer_keys WHERE customer_id = ${NEWC:-0}")"
-r="$(reveal admin 1 '["clabe"]')"; r2="$(reveal admin "${NEWC:-0}" '["clabe"]')"
-[ "$k" = "kek-v2" ] && [ "${r%% *}" = 200 ] && [ "${r2%% *}" = 200 ]; t "Rotation: a new customer uses kek-v2 and kek-v1 customers stay decryptable" $? "new=$NEWC kek=$k"
+k="$(db "SELECT k.kek_id = 'kek-' || lower(c.customer_code) || '-v1' FROM customer_keys k JOIN customers c ON c.id = k.customer_id WHERE c.id = ${NEWC:-0}")"
+r2="$(reveal admin "${NEWC:-0}" '["clabe"]')"
+[ "$k" = "t" ] && [ "${r2%% *}" = 200 ]; t "A new customer gets its own new KEK and decrypts" $? "new=$NEWC own=$k"
+orig="$(db "SELECT kek_id FROM customer_keys WHERE customer_id = 2")"
+db "UPDATE customer_keys SET kek_id = 'kek-cus-0001-v1' WHERE customer_id = 2" >/dev/null
+r="$(reveal admin 2 '["phone_number"]')"
+db "UPDATE customer_keys SET kek_id = '$orig' WHERE customer_id = 2" >/dev/null
+r2="$(reveal admin 2 '["phone_number"]')"
+[ "${r%% *}" = 403 ] && echo "$r" | grep -q KEK_OWNER_MISMATCH && [ "${r2%% *}" = 200 ]; t "A customer's DEK cannot be unwrapped with another customer's KEK (KEK_OWNER_MISMATCH)" $? "tampered=${r%% *} restored=${r2%% *}"
+vault_cli shred CUS-0003 >/dev/null 2>&1
+r="$(reveal admin 3 '["phone_number"]')"; r2="$(reveal admin 4 '["phone_number"]')"
+[ "${r%% *}" = 404 ] && echo "$r" | grep -q KEK_NOT_FOUND && [ "${r2%% *}" = 200 ]; t "Shredding CUS-0003's KEK only makes CUS-0003 unreadable" $? "cus3=${r%% *} cus4=${r2%% *}"
 vault_login >/dev/null   # GUI sessions live in memory; the earlier restart invalidated them
 vt="$(curl -s -b "$vjar" "$V/disaster" | sed -n 's/.*name="csrf-token" content="\([a-f0-9]*\)".*/\1/p')"
 curl -s -o /dev/null -b "$vjar" -c "$vjar" --data-urlencode "_csrf=$vt" --data-urlencode "confirm=LOSE-KEYSTORE" "$V/disaster/storage-loss"
@@ -223,9 +237,8 @@ sleep 1; r="$(reveal admin 1 '["phone_number"]')"
 init="$(docker compose exec -T hotel-app node -e "require('./src/vaultClient').initialize().then(()=>console.log('CREADO')).catch(e=>console.log(e.code))")"
 [ "${r%% *}" = 404 ] && echo "$r" | grep -q KEK_NOT_FOUND && [ "$init" = "KEYSTORE_MISSING" ]; t "Keystore loss: KEK_NOT_FOUND and the Key Vault refuses to generate replacement keys" $? "init=$init"
 "$ROOT/scripts/restore.sh" keys latest > "$TEST_DIR/restore-keys.log" 2>&1; rc=$?
-r="$(reveal admin 1 '["phone_number"]')"; r2="$(reveal admin "${NEWC:-0}" '["phone_number"]')"
-[ $rc = 0 ] && [ "${r%% *}" = 200 ] && [ "${r2%% *}" = 200 ]; t "Restoring KEKs from the independent backup restores access (kek-v1 and kek-v2)" $?
-FP1="$(fingerprints)"
+r="$(reveal admin 1 '["phone_number"]')"; r2="$(reveal admin "${NEWC:-0}" '["phone_number"]')"; r3="$(reveal admin 3 '["phone_number"]')"
+[ $rc = 0 ] && [ "${r%% *}" = 200 ] && [ "${r2%% *}" = 200 ] && [ "${r3%% *}" = 200 ]; t "Restoring KEKs from the backup restores every customer (rotated, new and shredded)" $?
 
 # ----------------------------------------------------------------- Lab 1
 section "Lab 1: replication and manual failover"
@@ -275,6 +288,7 @@ C1="$(pg_sql postgres-primary "SELECT count(*) || '/' || (SELECT count(*) FROM r
 C2="$(pg_sql postgres-primary "SELECT count(*) FROM customers")"
 sleep 1; api="$(curl -s -b "$TEST_DIR/admin.jar" "$H/api/status" | jget counts.customers)"
 [ $rc = 0 ] && [ "$C2" -lt "${C1%/*}" ] && [ "$api" = "$C2" ]; t "Accidental deletion simulated and visible in the application" $? "before=${C1%/*} after=$C2"
+FP1="$(fingerprints)"
 "$ROOT/scripts/restore.sh" pitr --name before_deletion > "$TEST_DIR/pitr.log" 2>&1; rc=$?
 C3="$(pg_sql postgres-recovery "SELECT count(*) || '/' || (SELECT count(*) FROM reservations) FROM customers")"
 has="$(pg_sql postgres-recovery "SELECT count(*) FROM customers WHERE id = ${POSTC:-0}")"
@@ -291,8 +305,8 @@ vault_cli access enable >/dev/null 2>&1
 r="$(reveal admin 1 '["phone_number"]')"; [ "${r%% *}" = 200 ]; t "Restoring KEK access makes the recovered data readable" $?
 tok="$(cat "$TEST_DIR/admin.jar.csrf")"
 curl -s -o /dev/null -b "$TEST_DIR/admin.jar" --data-urlencode "_csrf=$tok" "$H/security/rewrap"
-v="$(pg_sql postgres-recovery "SELECT string_agg(DISTINCT kek_id, ',') FROM customer_keys")"; r="$(reveal admin 1 '["clabe"]')"
-[ "$v" = "kek-v2" ] && [ "${r%% *}" = 200 ]; t "Optional re-wrap migrates every DEK to the active KEK" $? "$v"
+v="$(pg_sql postgres-recovery "SELECT (SELECT kek_id FROM customer_keys WHERE customer_id = 1) || '/' || (SELECT kek_id FROM customer_keys WHERE customer_id = 2) || '/' || count(DISTINCT kek_id) || '/' || count(*) FROM customer_keys")"; r="$(reveal admin 1 '["clabe"]')"
+[ "${v%%/*}" = "kek-cus-0001-v2" ] && [ "$(echo "$v" | cut -d/ -f2)" = "kek-cus-0002-v1" ] && [ "$(echo "$v" | cut -d/ -f3)" = "$(echo "$v" | cut -d/ -f4)" ] && [ "${r%% *}" = 200 ]; t "Optional re-wrap moves each DEK to its own customer's active KEK" $? "$v"
 U1="$(pg_sql postgres-recovery "SELECT count(*) FROM users")"
 docker compose restart hotel-app >/dev/null 2>&1; wait_healthy hotel-app 60; sleep 3
 [ "$(pg_sql postgres-recovery "SELECT count(*) FROM users")" = "$U1" ] && docker compose logs --since 30s hotel-app 2>/dev/null | grep -q "Nothing is regenerated"; t "Restarting the app on a restored database does not re-run the seed" $?

@@ -49,7 +49,7 @@ app.get('/health', (req, res) => {
     status: 'ok',
     web: 'up',
     db: { status: db.health.status, target: db.target, cluster: db.health.server ? db.health.server.cluster_name : null, in_recovery: db.health.server ? db.health.server.in_recovery : null },
-    vault: { available: v.available, status: v.vault_status || v.error, active_kek_id: v.active_kek_id || null },
+    vault: { available: v.available, status: v.vault_status || v.error, customer_keks: v.owner_count ?? null },
   });
 });
 

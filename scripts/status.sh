@@ -33,7 +33,7 @@ fi
 
 if service_running key-vault; then
   title "Key Vault"
-  vault_cli status 2>/dev/null | grep -E '"(vault_status|active_kek_id|kek_count|access_disabled|simulated_outage|wrap|unwrap)"' | sed 's/^ */  /'
+  vault_cli status 2>/dev/null | grep -E '^ {2,4}"(vault_status|owner_count|kek_count|active_kek_count|retired_kek_count|access_disabled|simulated_outage|wrap|unwrap)"' | sed 's/^ */  /'
 fi
 echo
 echo "Hotel: http://localhost:${HOTEL_APP_PORT}   Key Vault: http://localhost:${KEY_VAULT_APP_PORT}"

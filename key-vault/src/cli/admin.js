@@ -10,7 +10,8 @@
  *   node src/cli/admin.js restore <file|latest>
  *   node src/cli/admin.js access disable|enable
  *   node src/cli/admin.js outage enable|disable
- *   node src/cli/admin.js rotate
+ *   node src/cli/admin.js rotate <CUS-0001|all>
+ *   node src/cli/admin.js shred <CUS-0001>      (lab: crypto-shredding of one customer's KEKs)
  */
 
 const cfg = require('../config');
@@ -65,10 +66,15 @@ async function main() {
       out = await call('POST', '/api/v1/admin/outage', { enabled: arg === 'enable' });
       break;
     case 'rotate':
-      out = await call('POST', '/api/v1/admin/rotate');
+      if (!arg) throw new Error('Usage: admin.js rotate <CUS-0001|all>');
+      out = await call('POST', '/api/v1/admin/rotate', arg === 'all' ? { all: true } : { owner: arg.toUpperCase() });
+      break;
+    case 'shred':
+      if (!arg) throw new Error('Usage: admin.js shred <CUS-0001>');
+      out = await call('POST', '/api/v1/admin/shred', { owner: arg.toUpperCase() });
       break;
     default:
-      console.error('Usage: admin.js status|backup|backups|restore|access|outage|rotate');
+      console.error('Usage: admin.js status|backup|backups|restore|access|outage|rotate <owner|all>|shred <owner>');
       process.exit(2);
   }
   console.log(JSON.stringify(out, null, 2));

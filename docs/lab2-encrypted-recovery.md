@@ -113,13 +113,19 @@ WHERE table_schema = 'public' AND (column_name ILIKE '%kek%' OR column_name ILIK
 ORDER BY 1, 2;
 ```
 
-Only `kek_id` (a reference) and the columns of the **wrapped** DEK appear.
+Only `kek_id` (a reference) and the columns of the **wrapped** DEK appear. Notice that customer 1's `kek_id` is `kek-cus-0001-v1`: every customer has its **own** KEK.
+
+```sql
+SELECT c.customer_code, k.kek_id
+FROM customers c JOIN customer_keys k ON k.customer_id = c.id
+ORDER BY c.id LIMIT 5;
+```
 
 In the hotel app (http://localhost:3000, `admin@hotel-lab.test` / `Admin2026!`):
 
 1. Open `CUS-0001` > **Personal information** > **Reveal sensitive information**. Write down the phone number.
 2. **Encryption details** tab: compare `wrapped_dek` and the `phone_number` nonce/ciphertext with what you saw in DBeaver.
-3. In the Key Vault (http://localhost:3001, `vault_admin` / `VaultAdmin2026!`) open **KEKs** and confirm that `kek-v1` exists. Open **Backup and recovery**: an automatic backup was already created at initialization.
+3. In the Key Vault (http://localhost:3001, `vault_admin` / `VaultAdmin2026!`) open **KEKs**, filter by `CUS-0001` and confirm that `kek-cus-0001-v1` exists. Clear the filter: there are 150 KEKs, one per customer. Open **Backup and recovery**: the `auto-seed` backup already contains all of them.
 
 **Checkpoint 2:** you can explain which value is in plaintext, which is encrypted, and where each key lives.
 
@@ -166,7 +172,7 @@ Question: a base backup is a snapshot of one instant. What does the archived WAL
 
 ## Part 4: New data and a restore point (10 min)
 
-1. In the hotel app create a customer: **Customers > New customer > Generate fictional data > Encrypt and save customer**. Write down its code (for example `CUS-0151`). This customer is **not** in the base backup: it only exists in the WAL.
+1. In the hotel app create a customer: **Customers > New customer > Generate fictional data > Encrypt and save customer**. Write down its code (for example `CUS-0151`). This customer is **not** in the base backup: it only exists in the WAL. The Key Vault created its own KEK (`kek-cus-0151-v1`) and backed it up automatically.
 2. Create a reservation for that customer.
 3. Create the restore point:
 
@@ -283,7 +289,7 @@ Reveal again: it works. (If the Key Vault GUI asks you to sign in again, that is
 
 1. In the Key Vault open **Disaster simulation > KEK storage loss**, click **Simulate KEK loss** and type `LOSE-KEYSTORE`.
 2. The Key Vault dashboard shows **Keystore missing**. The hotel app shows **KEK not found** and **Reveal** answers `[KEK_NOT_FOUND]`.
-3. Think about it: the database is perfectly recovered, but its sensitive data is useless without the KEK. The Key Vault does **not** generate a new `kek-v1`, because it would be incompatible with the existing wrapped DEKs.
+3. Think about it: the database is perfectly recovered, but its sensitive data is useless without the KEKs. The Key Vault does **not** generate new customer KEKs, because they would be incompatible with the existing wrapped DEKs.
 4. Restore the KEK from the independent backup:
 
    ```bash
@@ -291,9 +297,19 @@ Reveal again: it works. (If the Key Vault GUI asks you to sign in again, that is
    ```
 
    Or in the GUI: **Backup and recovery > Restore** on the most recent backup.
-5. In the hotel app reveal `CUS-0001` again: the original data is readable again.
+5. In the hotel app reveal `CUS-0001` again: the original data is readable again. Reveal your new customer (`CUS-0151`) too: its KEK was in the automatic backup.
 
-**Checkpoint 7:** you showed that without the KEK there is no data, and that the independent key backup restores access.
+### 7.3 Shredding one customer's KEK (optional, 5 min)
+
+Every customer has its own KEK, so a key can be destroyed for **one** customer only (crypto-shredding).
+
+1. In the Key Vault open **Disaster simulation > Shred one customer's KEK**, type `CUS-0002`, click **Shred KEK** and type `SHRED`.
+2. In the hotel reveal `CUS-0002`: `[KEK_NOT_FOUND]`. Reveal `CUS-0003`: it works. The database still holds CUS-0002's ciphertext, but nobody can read it.
+3. Undo it: `./scripts/restore.sh keys latest` (in the lab the KEK stays in the backups).
+
+Question: if a customer asks to be forgotten, why is destroying their KEK easier than deleting their rows from every database backup?
+
+**Checkpoint 7:** you showed that without the KEK there is no data, that the independent key backup restores access, and that one customer's KEK can be destroyed without affecting the others.
 
 ## Part 8: Discussion (10 min)
 
@@ -314,6 +330,8 @@ Reveal again: it works. (If the Key Vault GUI asks you to sign in again, that is
 | DBeaver cannot connect to 5435 | `docker compose --profile lab2 ps postgres-recovery` | Run `./scripts/restore.sh pitr ...` first. |
 | The app still shows 46 customers | `curl -s http://localhost:3000/health` | `./scripts/switch-db.sh postgres-recovery`, or **Connect the app here** on Recovery. |
 | `KEK_NOT_FOUND` after restoring keys | `./scripts/backup.sh list` | Restore a backup that includes the `kek_id` the customers use (see **Security and encryption**). |
+| `KEK_NOT_FOUND` for one customer only | Key Vault: **Disaster simulation > Shredded customer KEKs** | That customer's KEK was shredded: `./scripts/restore.sh keys latest`. |
+| `KEK_OWNER_MISMATCH` | Hotel **Security and encryption**: *KEK of another customer* | The customer's `kek_id` row was changed to another customer's KEK. Recover the original row (PITR) or set it back to `kek-<customer code>-v<N>`. |
 | `BACKUP_DECRYPT_FAILED` | `VAULT_BACKUP_PASSPHRASE` was changed | Use the original `.env` (or its `.env.bak-...` copy). |
 
 ## Safe reset

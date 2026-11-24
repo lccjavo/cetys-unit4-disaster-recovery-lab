@@ -1,7 +1,7 @@
 <%- include('partials/header') %>
 <div class="page-header">
   <h1>Key Vault dashboard</h1>
-  <p class="lead">Independent service that holds the KEKs. PostgreSQL only stores the <code>kek_id</code> identifier and the wrapped DEKs.</p>
+  <p class="lead">Independent service that holds one KEK ring per customer. PostgreSQL only stores each customer's <code>kek_id</code> identifier and wrapped DEK.</p>
 </div>
 <% if (s.vault_status === 'KEYSTORE_MISSING') { %>
   <div class="alert alert-danger"><i class="bi bi-x-octagon me-1"></i><strong>KEK storage missing.</strong> The encrypted data in PostgreSQL is preserved but cannot be decrypted. Restore from <a href="/backups" class="alert-link">Backup and recovery</a>. The Key Vault never generates a replacement KEK automatically.</div>
@@ -15,11 +15,11 @@
   </div></div></div>
   <div class="col-12 col-md-6 col-xl-3"><div class="card stat-card h-100"><div class="card-body d-flex gap-3 align-items-center">
     <span class="stat-icon"><i class="bi bi-key-fill"></i></span>
-    <div><div class="stat-label">Active KEK</div><div class="stat-value mono"><%= s.active_kek_id || 'none' %></div></div>
+    <div><div class="stat-label">Customers with a KEK</div><div class="stat-value"><%= s.owner_count %></div></div>
   </div></div></div>
   <div class="col-12 col-md-6 col-xl-3"><div class="card stat-card h-100"><div class="card-body d-flex gap-3 align-items-center">
     <span class="stat-icon"><i class="bi bi-layers"></i></span>
-    <div><div class="stat-label">KEK versions</div><div class="stat-value"><%= s.kek_count %></div></div>
+    <div><div class="stat-label">KEK versions</div><div class="stat-value"><%= s.kek_count %></div><div class="small text-secondary"><%= s.active_kek_count %> active · <%= s.retired_kek_count %> retired</div></div>
   </div></div></div>
   <div class="col-12 col-md-6 col-xl-3"><div class="card stat-card h-100"><div class="card-body d-flex gap-3 align-items-center">
     <span class="stat-icon"><i class="bi bi-archive"></i></span>
@@ -41,16 +41,16 @@
 <div class="row g-3 mt-1">
   <div class="col-12 col-lg-6">
     <div class="card h-100">
-      <div class="card-header"><i class="bi bi-key me-1"></i>Key availability</div>
+      <div class="card-header d-flex justify-content-between align-items-center"><span><i class="bi bi-key me-1"></i>Key availability (latest 10 KEKs)</span><a href="/keys" class="small">All <%= s.kek_count %> KEKs</a></div>
       <div class="card-body p-0">
         <% if (!s.keks.length) { %>
           <div class="empty-state"><i class="bi bi-key"></i><p class="mt-2 mb-0">No KEKs loaded.</p></div>
         <% } else { %>
         <div class="table-responsive"><table class="table table-hover align-middle mb-0">
-          <thead><tr><th>kek_id</th><th>Status</th><th>Created</th><th class="text-end">wrap / unwrap</th></tr></thead>
+          <thead><tr><th>Customer</th><th>kek_id</th><th>Status</th><th>Created</th><th class="text-end">wrap / unwrap</th></tr></thead>
           <tbody>
-          <% s.keks.forEach(k => { %>
-            <tr><td class="mono"><%= k.kek_id %></td>
+          <% s.keks.slice().sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)) || b.owner.localeCompare(a.owner)).slice(0, 10).forEach(k => { %>
+            <tr><td class="mono"><%= k.owner %></td><td class="mono"><%= k.kek_id %></td>
               <td><span class="badge text-bg-<%= k.status === 'active' ? 'success' : 'secondary' %>"><%= k.status === 'active' ? 'Active' : 'Retired' %></span></td>
               <td class="small"><%= fmtDate(k.created_at) %></td>
               <td class="text-end"><%= k.usage.wrap %> / <%= k.usage.unwrap %></td></tr>
@@ -69,7 +69,7 @@
         <% } %>
         <ul class="timeline">
           <% s.rotation_history.slice(0, 5).forEach(h => { %>
-            <li><div class="small fw-semibold"><%= h.action %> <span class="mono"><%= h.kek_id || (h.added || []).join(', ') %></span></div><div class="small text-secondary"><%= fmtDate(h.at) %> by <%= h.actor %></div></li>
+            <li><div class="small fw-semibold"><%= h.action %> <span class="mono"><%= h.action === 'rotate' ? h.kek_id : h.action === 'rotate-all' ? `${h.count} customers` : h.action === 'restore' ? `${h.added_count ?? (h.added || []).length} KEKs` : (h.kek_id || '') %></span></div><div class="small text-secondary"><%= fmtDate(h.at) %> by <%= h.actor %></div></li>
           <% }) %>
           <% events.slice(0, 5).forEach(e => { %>
             <li><div class="small"><span class="badge text-bg-<%= e.outcome === 'success' ? 'light' : 'danger' %> border"><%= e.action %></span> <%= e.actor %></div><div class="small text-secondary"><%= fmtDate(e.at) %></div></li>

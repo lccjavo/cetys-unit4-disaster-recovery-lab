@@ -6,7 +6,9 @@
  * - Runs ONCE per database: when it finishes it writes lab_metadata.seed_completed_at.
  * - It never runs on a database that already has customers or the seed marker
  *   (for example, a database restored with PITR).
- * - It only asks the Key Vault to create the first KEK if the Key Vault was never initialized.
+ * - It initializes the Key Vault only if it was never initialized. Each customer gets its OWN KEK
+ *   (kek-cus-0001-v1, kek-cus-0002-v1, ...), created by the Key Vault on that customer's first wrap.
+ *   customer_keys.kek_id stores exactly that KEK, so decryption always uses the customer's own key.
  *   If the Key Vault lost its KEKs, it stops and reports it (it never generates incompatible keys).
  * - Sensitive fields are encrypted in the application BEFORE the INSERT.
  */
@@ -15,7 +17,7 @@ const argon2 = require('argon2');
 const cfg = require('./config');
 const { db } = require('./db');
 const vault = require('./vaultClient');
-const { sealProfile, openFields } = require('./crypto/envelope');
+const { sealProfile, openFields, kekPrefixFor } = require('./crypto/envelope');
 const { SENSITIVE_KEYS, OPERATIONAL_KEYS } = require('./fields');
 const { generateSeedData } = require('./data/generator');
 
@@ -41,12 +43,13 @@ async function seedState() {
   return { seededAt: marker.rows[0] ? marker.rows[0].value : null, ...counts.rows[0] };
 }
 
-async function ensureKek(log) {
+async function ensureVault(log) {
   const health = await vault.health({ fresh: true });
   if (!health.available) throw new Error(`Key Vault unavailable (${health.error}). Start the key-vault service.`);
+  if (health.access_disabled) throw new Error('Key access is disabled in the Key Vault. Restore access before seeding.');
   if (health.vault_status === 'READY') {
-    log(`[seed] Key Vault ready. Existing KEKs are preserved; active KEK: ${health.active_kek_id}`);
-    return health.active_kek_id;
+    log(`[seed] Key Vault ready. Existing KEKs are preserved (${health.owner_count} customers with a KEK).`);
+    return;
   }
   if (health.vault_status === 'KEYSTORE_MISSING') {
     throw new Error(
@@ -55,15 +58,14 @@ async function ensureKek(log) {
     );
   }
   const init = await vault.initialize();
-  log(`[seed] First KEK created in the Key Vault: ${init.kek_id} (automatic backup: ${init.backup})`);
-  return init.kek_id;
+  log(`[seed] Key Vault initialized (one KEK per customer; automatic backup: ${init.backup})`);
 }
 
 async function insertCustomer(client, { userId, code, profile, isSeed }) {
   const { rows } = await client.query("SELECT nextval(pg_get_serial_sequence('customers', 'id')) AS id");
   const customerId = Number(rows[0].id);
   // 1) Encryption in the application (new DEK + 20 fields) and DEK wrapping in the Key Vault.
-  const sealed = await sealProfile(customerId, profile.sensitive);
+  const sealed = await sealProfile(customerId, code, profile.sensitive);
   // 2) Only then is anything written to PostgreSQL.
   const cols = ['id', 'user_id', 'customer_code', 'full_name', 'status', ...OPERATIONAL_KEYS, 'is_seed'];
   const vals = [customerId, userId, code, profile.fullName, profile.status, ...OPERATIONAL_KEYS.map((k) => profile.operational[k]), isSeed];
@@ -86,7 +88,7 @@ async function insertCustomer(client, { userId, code, profile, isSeed }) {
 
 async function verifyDecryption(log) {
   const { rows } = await db.query(
-    `SELECT c.id, s.encrypted_fields, k.dek_ref, k.wrapped_dek, k.dek_wrap_nonce, k.dek_wrap_tag, k.kek_id
+    `SELECT c.id, c.customer_code, s.encrypted_fields, k.dek_ref, k.wrapped_dek, k.dek_wrap_nonce, k.dek_wrap_tag, k.kek_id
      FROM customers c JOIN customer_sensitive_data s ON s.customer_id = c.id JOIN customer_keys k ON k.customer_id = c.id
      ORDER BY c.id`,
   );
@@ -94,6 +96,10 @@ async function verifyDecryption(log) {
   const failures = [];
   for (const r of rows) {
     try {
+      if (!r.kek_id.startsWith(kekPrefixFor(r.customer_code))) {
+        failures.push({ id: r.id, error: `kek_id ${r.kek_id} is not the KEK of ${r.customer_code}` });
+        continue;
+      }
       const values = await openFields(Number(r.id), r, r.encrypted_fields, SENSITIVE_KEYS);
       if (Object.keys(values).length === SENSITIVE_KEYS.length) ok += 1;
       else failures.push({ id: r.id, error: 'incomplete fields' });
@@ -101,7 +107,7 @@ async function verifyDecryption(log) {
       failures.push({ id: r.id, error: err.code || err.message });
     }
   }
-  if (log) log(`[seed] Decryption check: ${ok}/${rows.length} customers with all 20 fields readable`);
+  if (log) log(`[seed] Decryption check: ${ok}/${rows.length} customers decrypted with their own KEK (all 20 fields readable)`);
   return { total: rows.length, ok, failures };
 }
 
@@ -127,7 +133,7 @@ async function runSeed({ log = console.log } = {}) {
       );
     }
 
-    const activeKek = await ensureKek(log);
+    await ensureVault(log);
     const started = Date.now();
     const data = generateSeedData({ count: cfg.seed.customerCount, seed: cfg.seed.prngSeed, referenceDate: cfg.seed.referenceDate });
 
@@ -145,7 +151,7 @@ async function runSeed({ log = console.log } = {}) {
         await client.query('INSERT INTO users (username, password_hash, role, display_name) VALUES ($1, $2, $3, $4)', [a.username, staffHashes[i], a.role, a.display_name]);
       }
       let reservationSeq = 0;
-      const kekIds = new Set();
+      const kekIds = [];
       for (let i = 0; i < data.length; i += 1) {
         const p = data[i];
         const u = await client.query(
@@ -153,7 +159,7 @@ async function runSeed({ log = console.log } = {}) {
           [p.username, customerHashes[i], p.fullName],
         );
         const { customerId, kekId } = await insertCustomer(client, { userId: u.rows[0].id, code: p.customerCode, profile: p, isSeed: true });
-        kekIds.add(kekId);
+        kekIds.push(kekId);
         for (const r of p.reservations) {
           reservationSeq += 1;
           await client.query(
@@ -171,25 +177,33 @@ async function runSeed({ log = console.log } = {}) {
       );
       await client.query(
         "INSERT INTO audit_events (actor_username, action, target_type, outcome, details) VALUES ('system', 'seed', 'database', 'success', $1)",
-        [JSON.stringify({ customers: data.length, reservations: reservationSeq, kek_ids: [...kekIds] })],
+        [JSON.stringify({ customers: data.length, reservations: reservationSeq, distinct_keks: new Set(kekIds).size })],
       );
-      return { reservations: reservationSeq, kekIds: [...kekIds] };
+      return { reservations: reservationSeq, kekIds };
     });
 
     const after = await seedState();
     if (after.customers !== cfg.seed.customerCount) {
       throw new Error(`Expected ${cfg.seed.customerCount} customers but found ${after.customers}`);
     }
+    const distinctKeks = new Set(result.kekIds).size;
+    if (distinctKeks !== after.customers) {
+      throw new Error(`Expected one KEK per customer (${after.customers}) but found ${distinctKeks} distinct KEKs`);
+    }
     const verification = await verifyDecryption(log);
     if (verification.ok !== verification.total) {
-      throw new Error(`Decryption check failed for ${verification.total - verification.ok} customers`);
+      const first = verification.failures[0];
+      throw new Error(`Decryption check failed for ${verification.total - verification.ok} customers (first: ${first.id} ${first.error})`);
     }
+    // Back up the new customer KEKs right away (independent from the PostgreSQL backups).
+    const kb = await vault.backup('auto-seed');
+    log(`[seed] Customer KEKs backed up: ${kb.file} (${kb.kek_count} KEKs)`);
     const seconds = ((Date.now() - started) / 1000).toFixed(1);
     log('[seed] ------------------------------------------------------------');
     log(`[seed] Initialization completed in ${seconds} s`);
     log(`[seed] Users: ${after.users} (3 staff + ${after.customers} customers)`);
     log(`[seed] Customers with 20 encrypted fields: ${after.customers}`);
-    log(`[seed] Wrapped DEKs: ${after.keys} (KEK: ${result.kekIds.join(', ') || activeKek})`);
+    log(`[seed] Wrapped DEKs: ${after.keys}, each with its own customer KEK (${distinctKeks} KEKs: ${result.kekIds[0]} ... ${result.kekIds[result.kekIds.length - 1]})`);
     log(`[seed] Reservations: ${after.reservations}`);
     log('[seed] ------------------------------------------------------------');
     return { skipped: false, ...after, kekIds: result.kekIds, verification };

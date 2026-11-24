@@ -40,7 +40,7 @@
             <tr>
               <td class="mono small"><%= b.file %></td>
               <td class="small"><%= fmtDate(b.created_at) %></td>
-              <td class="mono small"><%= (b.kek_ids || []).join(', ') %></td>
+              <td class="small"><%= b.kek_count ?? 'N/A' %><%= b.owner_count != null ? ` (${b.owner_count} customers)` : '' %></td>
               <td class="mono small"><%= (b.sha256 || '').slice(0, 12) %></td>
               <td class="text-end">
                 <form method="post" action="/backups/restore" id="restore-<%= i %>" class="d-inline">

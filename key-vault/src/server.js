@@ -16,7 +16,7 @@ const api = createApi(store, cfg).listen(cfg.apiPort, '0.0.0.0', () => {
 });
 const gui = createGui(store, cfg).listen(cfg.guiPort, '0.0.0.0', () => {
   console.log(`[vault] Administration GUI listening on :${cfg.guiPort}`);
-  console.log(`[vault] Key store status: ${store.status()}; active KEK: ${store.activeKek() ? store.activeKek().kek_id : 'none'}`);
+  console.log(`[vault] Key store status: ${store.status()}; customers with a KEK: ${store.summary().owner_count}`);
 });
 
 function shutdown(signal) {

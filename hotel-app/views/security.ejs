@@ -2,13 +2,13 @@
 <% const sc = s.schema.ok ? s.schema.value : null; const vs = s.vaultStatus.ok ? s.vaultStatus.value : null; %>
 <div class="page-header">
   <h1>Security and encryption</h1>
-  <p class="lead">Envelope encryption: one random DEK per customer encrypts its 20 fields; the Key Vault wraps each DEK with a KEK. DEKs and KEKs are never shown in plaintext.</p>
+  <p class="lead">Envelope encryption: one random DEK per customer encrypts its 20 fields; the Key Vault wraps each DEK with <strong>that customer's own KEK</strong>. DEKs and KEKs are never shown in plaintext.</p>
 </div>
 <div class="row g-3">
   <% const cards = [
       ['shield-check', 'Sensitive fields encrypted?', sc ? (sc.complete_profiles === sc.customers ? 'Yes, all' : `${sc.complete_profiles}/${sc.customers}`) : 'N/A', sc ? `${sc.customers} profiles · 20 fields each` : ''],
       ['key', 'Unique DEKs', sc ? sc.distinct_deks : 'N/A', sc ? `${sc.wrapped_deks} wrapped · ${sc.customers_without_key} without a DEK` : ''],
-      ['safe2', 'Key Vault', s.vaultHealth.available ? s.vaultHealth.vault_status : 'Unavailable', s.vaultHealth.available ? `Active KEK: ${s.vaultHealth.active_kek_id}` : s.vaultHealth.error],
+      ['safe2', 'Key Vault', s.vaultHealth.available ? s.vaultHealth.vault_status : 'Unavailable', s.vaultHealth.available ? `${s.vaultHealth.owner_count} customer KEKs (${s.vaultHealth.kek_count} versions)` : s.vaultHealth.error],
       ['hdd', 'Encrypted size', sc ? sc.encrypted_size : 'N/A', sc ? `~${sc.avg_encrypted_bytes} B encrypted vs ~${sc.avg_operational_row_bytes} B operational per customer` : ''],
   ]; %>
   <% cards.forEach(([icon, label, value, sub]) => { %>
@@ -21,26 +21,34 @@
 <div class="row g-3 mt-1">
   <div class="col-12 col-lg-6">
     <div class="card h-100">
-      <div class="card-header"><i class="bi bi-diagram-3 me-1"></i>DEKs per KEK (PostgreSQL vs Key Vault)</div>
+      <div class="card-header"><i class="bi bi-diagram-3 me-1"></i>Each customer's kek_id (PostgreSQL vs Key Vault)</div>
       <div class="card-body p-0">
         <% if (!s.kekUsage.ok) { %><div class="empty-state"><i class="bi bi-database-x"></i><p class="mt-2 mb-0"><%= s.kekUsage.message %></p></div>
-        <% } else { const known = vs ? new Map(vs.keks.map(k => [k.kek_id, k])) : new Map(); %>
+        <% } else { const u = s.kekUsage.value; const g = u.groups;
+             const rowsDef = [
+               ['success', 'On its own active KEK', g.active, 'kek-cus-NNNN-v(latest) of the same customer'],
+               ['secondary', 'On its own retired KEK', g.retired, 'Still decryptable; re-wrap moves it to the active version'],
+               ['danger', 'KEK missing in the Key Vault', g.missing, 'KEK_NOT_FOUND: restore it from a KEK backup'],
+               ['danger', 'KEK of another customer', g.foreign, 'Never expected: the Key Vault refuses it (KEK_OWNER_MISMATCH)'],
+             ]; %>
         <div class="table-responsive"><table class="table align-middle mb-0">
-          <thead><tr><th>kek_id</th><th class="text-end">Customers</th><th>In the Key Vault</th><th>Status</th></tr></thead>
+          <thead><tr><th>Status</th><th class="text-end">Customers</th><th>Examples</th></tr></thead>
           <tbody>
-          <% s.kekUsage.value.forEach(k => { const v = known.get(k.kek_id); %>
-            <tr><td class="mono"><%= k.kek_id %></td><td class="text-end"><%= k.customers %></td>
-              <td><% if (!vs) { %><span class="badge text-bg-secondary">Cannot verify</span><% } else if (v) { %><span class="badge text-bg-success">Exists</span><% } else { %><span class="badge text-bg-danger">KEK not found</span><% } %></td>
-              <td><%= v ? (v.status === 'active' ? 'Active' : 'Retired (unwrap only)') : '' %></td></tr>
+          <% rowsDef.forEach(([variant, label, list, hint]) => { %>
+            <tr><td><span class="badge text-bg-<%= list.length ? variant : 'light border' %>"><%= label %></span><div class="small text-secondary"><%= hint %></div></td>
+              <td class="text-end fw-semibold"><%= list.length %></td>
+              <td class="mono small"><%= list.slice(0, 3).map(r => `${r.customer_code}: ${r.kek_id}`).join(', ') %><%= list.length > 3 ? ', ...' : '' %></td></tr>
           <% }) %>
+          <% if (!u.verified) { %><tr><td colspan="3" class="small"><span class="badge text-bg-secondary">Cannot verify</span> The Key Vault is unavailable; <%= g.unknown.length %> kek_id not checked.</td></tr><% } %>
           </tbody></table></div>
+        <div class="px-3 py-2 small text-secondary border-top"><%= u.total %> customers · <%= u.distinct %> distinct kek_id (one KEK per customer)</div>
         <% } %>
       </div>
       <div class="card-footer bg-white">
         <form method="post" action="/security/rewrap" class="d-flex flex-wrap align-items-center gap-2">
           <input type="hidden" name="_csrf" value="<%= csrf %>">
-          <button type="submit" class="btn btn-sm btn-outline-primary" <%= vs ? '' : 'disabled' %> data-confirm="DEKs wrapped with older KEKs will be re-wrapped with the active KEK (<%= vs ? vs.active_kek_id : '' %>). The DEK never leaves the Key Vault during this operation and the encrypted data does not change." data-confirm-title="Re-wrap DEKs" data-confirm-variant="btn-primary"><i class="bi bi-arrow-repeat me-1"></i>Re-wrap DEKs with the active KEK</button>
-          <span class="small text-secondary">Optional, after rotating the KEK in the Key Vault.</span>
+          <button type="submit" class="btn btn-sm btn-outline-primary" <%= vs ? '' : 'disabled' %> data-confirm="Every DEK wrapped with a retired KEK version is re-wrapped with the ACTIVE KEK of its own customer (for example kek-cus-0001-v1 -> kek-cus-0001-v2). The DEK never leaves the Key Vault and the encrypted data does not change." data-confirm-title="Re-wrap DEKs" data-confirm-variant="btn-primary"><i class="bi bi-arrow-repeat me-1"></i>Re-wrap DEKs with each customer's active KEK</button>
+          <span class="small text-secondary">Optional, after rotating KEKs in the Key Vault.</span>
         </form>
       </div>
     </div>
@@ -54,7 +62,8 @@
         <div class="field-row d-flex justify-content-between"><span class="field-label">Authentication tag</span><span>128 bits</span></div>
         <div class="field-row d-flex justify-content-between"><span class="field-label">Field AAD</span><span class="mono">customer + field + version</span></div>
         <div class="field-row d-flex justify-content-between"><span class="field-label">DEK</span><span>256 bits, one per customer</span></div>
-        <div class="field-row d-flex justify-content-between"><span class="field-label">DEK wrapping</span><span>AES-256-GCM with the KEK, AAD = kek_id + customer + dek_ref</span></div>
+        <div class="field-row d-flex justify-content-between"><span class="field-label">DEK wrapping</span><span>AES-256-GCM with the customer's own KEK, AAD = kek_id + customer + dek_ref</span></div>
+        <div class="field-row d-flex justify-content-between"><span class="field-label">KEK per customer</span><span class="mono">kek-cus-0001-v1, kek-cus-0002-v1, ...</span></div>
         <div class="field-row d-flex justify-content-between"><span class="field-label">Passwords</span><span>Argon2id (m=19 MiB, t=2, p=1)</span></div>
         <div class="field-row d-flex justify-content-between"><span class="field-label">Canal hotel &rarr; Key Vault</span><span>Internal HTTP + service token</span></div>
         <% if (vs) { %>

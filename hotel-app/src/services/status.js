@@ -11,7 +11,7 @@ const path = require('node:path');
 const cfg = require('../config');
 const { db, Database } = require('../db');
 const vault = require('../vaultClient');
-const { openFields, dekContext } = require('../crypto/envelope');
+const { openFields, dekContext, kekPrefixFor } = require('../crypto/envelope');
 const { SENSITIVE_KEYS } = require('../fields');
 
 async function safe(fn) {
@@ -52,7 +52,9 @@ function dbSnapshot() {
 
 async function security() {
   const [kekUsage, schema, vaultStatus, sample] = await Promise.all([
-    safe(async () => (await db.query('SELECT kek_id, count(*)::int AS customers FROM customer_keys GROUP BY kek_id ORDER BY kek_id')).rows),
+    safe(async () => (await db.query(
+      'SELECT c.customer_code, k.kek_id FROM customer_keys k JOIN customers c ON c.id = k.customer_id ORDER BY c.customer_code',
+    )).rows),
     safe(async () => (await db.query(`SELECT
         (SELECT count(*) FROM customers)::int AS customers,
         (SELECT count(*) FROM customer_sensitive_data)::int AS encrypted_profiles,
@@ -71,7 +73,24 @@ async function security() {
        ORDER BY c.id LIMIT 5`,
     )).rows),
   ]);
-  return { kekUsage, schema, vaultStatus, sample, vaultHealth: await vault.health() };
+  return { kekUsage: kekUsage.ok ? { ok: true, value: classifyKekUsage(kekUsage.value, vaultStatus) } : kekUsage, schema, vaultStatus, sample, vaultHealth: await vault.health() };
+}
+
+/**
+ * Compares each customer's kek_id in PostgreSQL with the Key Vault:
+ * own active KEK, own retired KEK, KEK missing from the Key Vault, or KEK of another customer.
+ */
+function classifyKekUsage(rows, vaultStatus) {
+  const known = vaultStatus.ok ? new Map(vaultStatus.value.keks.map((k) => [k.kek_id, k])) : null;
+  const groups = { active: [], retired: [], missing: [], foreign: [], unknown: [] };
+  for (const r of rows) {
+    if (!r.kek_id.startsWith(kekPrefixFor(r.customer_code))) groups.foreign.push(r);
+    else if (!known) groups.unknown.push(r);
+    else if (!known.has(r.kek_id)) groups.missing.push(r);
+    else if (known.get(r.kek_id).status === 'active') groups.active.push(r);
+    else groups.retired.push(r);
+  }
+  return { total: rows.length, distinct: new Set(rows.map((r) => r.kek_id)).size, groups, verified: Boolean(known) };
 }
 
 function readJsonFiles(dir) {
@@ -178,7 +197,7 @@ async function disasterRecovery() {
 async function verifyRecovery(sampleSize = 10) {
   const c = await counts();
   const { rows } = await db.query(
-    `SELECT c.id, s.encrypted_fields, k.dek_ref, k.wrapped_dek, k.dek_wrap_nonce, k.dek_wrap_tag, k.kek_id
+    `SELECT c.id, c.customer_code, s.encrypted_fields, k.dek_ref, k.wrapped_dek, k.dek_wrap_nonce, k.dek_wrap_tag, k.kek_id
      FROM customers c JOIN customer_sensitive_data s ON s.customer_id = c.id JOIN customer_keys k ON k.customer_id = c.id
      ORDER BY random() LIMIT $1`,
     [sampleSize],
@@ -204,19 +223,25 @@ async function verifyRecovery(sampleSize = 10) {
   return { outcome, customers: c.customers, reservations: c.reservations, sampled: rows.length, ok, errors, server };
 }
 
-/** Re-wraps the DEKs that do not use the active KEK (the DEK never leaves the Key Vault). */
+/**
+ * Re-wraps every DEK that is not on its customer's ACTIVE KEK (for example after a rotation).
+ * Each DEK stays with its own customer: kek-cus-0001-v1 -> kek-cus-0001-v2. The DEK never leaves the Key Vault.
+ */
 async function rewrapAll() {
   const vs = await vault.status();
+  const active = vs.keks.filter((k) => k.status === 'active').map((k) => k.kek_id);
   const { rows } = await db.query(
-    'SELECT customer_id, dek_ref, wrapped_dek, dek_wrap_nonce, dek_wrap_tag, kek_id FROM customer_keys WHERE kek_id <> $1 ORDER BY customer_id',
-    [vs.active_kek_id],
+    `SELECT k.customer_id, c.customer_code, k.dek_ref, k.wrapped_dek, k.dek_wrap_nonce, k.dek_wrap_tag, k.kek_id
+     FROM customer_keys k JOIN customers c ON c.id = k.customer_id
+     WHERE NOT (k.kek_id = ANY($1::text[])) ORDER BY k.customer_id`,
+    [active],
   );
   let ok = 0;
   let failed = 0;
   for (let i = 0; i < rows.length; i += 50) {
     const batch = rows.slice(i, i + 50);
     const res = await vault.rewrap(
-      batch.map((r) => ({ id: r.customer_id, kek_id: r.kek_id, wrapped_dek: r.wrapped_dek, nonce: r.dek_wrap_nonce, tag: r.dek_wrap_tag, context: dekContext(r.customer_id, r.dek_ref) })),
+      batch.map((r) => ({ id: r.customer_id, owner: r.customer_code, kek_id: r.kek_id, wrapped_dek: r.wrapped_dek, nonce: r.dek_wrap_nonce, tag: r.dek_wrap_tag, context: dekContext(r.customer_id, r.dek_ref) })),
     );
     for (const item of res.results) {
       if (!item.ok) {
@@ -230,7 +255,7 @@ async function rewrapAll() {
       ok += 1;
     }
   }
-  return { activeKek: vs.active_kek_id, candidates: rows.length, ok, failed };
+  return { candidates: rows.length, ok, failed };
 }
 
 module.exports = { dashboard, security, disasterRecovery, verifyRecovery, rewrapAll, counts, dbSnapshot };

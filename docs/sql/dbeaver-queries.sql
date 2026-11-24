@@ -41,16 +41,18 @@ FROM customers c
 JOIN customer_sensitive_data s ON s.customer_id = c.id
 WHERE c.id = 1;
 
--- 6. Read each customer's kek_id and how many DEKs each KEK wraps
-SELECT customer_id, kek_id, dek_ref
-FROM customer_keys
-ORDER BY customer_id
+-- 6. Every customer has its OWN KEK: kek_id = kek-<customer_code>-v<N>
+SELECT c.id AS customer_id, c.customer_code, k.kek_id, k.dek_ref
+FROM customer_keys k
+JOIN customers c ON c.id = k.customer_id
+ORDER BY c.id
 LIMIT 10;
 
-SELECT kek_id, count(*) AS customers
-FROM customer_keys
-GROUP BY kek_id
-ORDER BY kek_id;
+SELECT count(*) AS customers,
+       count(DISTINCT k.kek_id) AS distinct_keks,
+       count(*) FILTER (WHERE k.kek_id LIKE 'kek-' || lower(c.customer_code) || '-v%') AS on_their_own_kek
+FROM customer_keys k
+JOIN customers c ON c.id = k.customer_id;
 
 -- 7. Inspect a wrapped DEK (32 bytes of DEK encrypted with the KEK)
 SELECT customer_id,

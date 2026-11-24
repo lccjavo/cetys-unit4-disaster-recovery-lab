@@ -40,7 +40,7 @@ list_backups() {
   fi
   title "KEK backups"
   if service_running key-vault; then
-    vault_cli backups | grep -E '"(file|created_at|kek_ids)"|kek-v' | sed 's/^ */  /'
+    vault_cli backups | grep -E '"(file|created_at|kek_count|owner_count)"' | sed 's/^ */  /'
   else
     echo "  (Key Vault stopped)"
   fi

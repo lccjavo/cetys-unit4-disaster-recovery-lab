@@ -3,7 +3,7 @@
 /**
  * Envelope Encryption.
  *
- *   KEK (Key Vault) --wraps--> one DEK per customer (256 bits, random)
+ *   KEK of customer X (Key Vault, kek-cus-000X-vN) --wraps--> the DEK of customer X (256 bits, random)
  *   DEK --AES-256-GCM--> each of the 20 sensitive fields
  *
  * Every field uses a fresh 96-bit nonce and AAD that binds it to:
@@ -36,6 +36,19 @@ function dekContext(customerId, dekRef) {
   return `customer:${customerId}|dek_ref:${dekRef}`;
 }
 
+/** KEK owner used by the Key Vault: the customer code (CUS-0001). */
+function kekOwner(customerCode) {
+  if (typeof customerCode !== 'string' || !/^[A-Z]+-[0-9]+$/.test(customerCode)) {
+    throw new Error(`Invalid customer code for the KEK owner: ${customerCode}`);
+  }
+  return customerCode;
+}
+
+/** Prefix every kek_id of a customer must have: kek-cus-0001-v<N>. */
+function kekPrefixFor(customerCode) {
+  return `kek-${kekOwner(customerCode).toLowerCase()}-v`;
+}
+
 function encryptField(dek, customerId, field, plaintext) {
   const nonce = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv(ALGORITHM, dek, nonce, { authTagLength: 16 });
@@ -65,7 +78,8 @@ function decryptField(dek, customerId, field, envelope) {
  * Generates a new DEK, encrypts the 20 fields and asks the Key Vault to wrap the DEK.
  * Returns ONLY encrypted material: nothing in the result can read the fields without the KEK.
  */
-async function sealProfile(customerId, sensitive) {
+async function sealProfile(customerId, customerCode, sensitive) {
+  const owner = kekOwner(customerCode);
   const missing = SENSITIVE_KEYS.filter((k) => !(k in sensitive));
   if (missing.length) throw new Error(`Missing sensitive fields: ${missing.join(', ')}`);
   const dek = crypto.randomBytes(32);
@@ -73,7 +87,10 @@ async function sealProfile(customerId, sensitive) {
   try {
     const encryptedFields = {};
     for (const key of SENSITIVE_KEYS) encryptedFields[key] = encryptField(dek, customerId, key, sensitive[key]);
-    const wrapped = await vault.wrapDek(dek, dekContext(customerId, dekRef));
+    const wrapped = await vault.wrapDek(dek, dekContext(customerId, dekRef), owner);
+    if (!String(wrapped.kek_id).startsWith(kekPrefixFor(owner))) {
+      throw new Error(`The Key Vault wrapped the DEK of ${owner} with ${wrapped.kek_id}, which is not this customer's KEK.`);
+    }
     return {
       encryptedFields,
       key: {
@@ -91,9 +108,13 @@ async function sealProfile(customerId, sensitive) {
   }
 }
 
-/** Unwraps the DEK through the Key Vault and decrypts the requested fields. */
+/**
+ * Unwraps the DEK through the Key Vault with the customer's OWN KEK and decrypts the requested fields.
+ * keyRow must include customer_code: it is sent as the KEK owner and checked by the Key Vault.
+ */
 async function openFields(customerId, keyRow, encryptedFields, fields) {
-  const { dek_b64: dekB64 } = await vault.unwrapDek(keyRow, dekContext(customerId, keyRow.dek_ref));
+  const owner = kekOwner(keyRow.customer_code);
+  const { dek_b64: dekB64 } = await vault.unwrapDek(keyRow, dekContext(customerId, keyRow.dek_ref), owner);
   const dek = Buffer.from(dekB64, 'base64');
   try {
     const values = {};
@@ -114,6 +135,8 @@ module.exports = {
   decryptField,
   fieldAad,
   dekContext,
+  kekOwner,
+  kekPrefixFor,
   sealProfile,
   openFields,
 };

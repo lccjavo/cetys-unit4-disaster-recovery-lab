@@ -40,7 +40,7 @@
       </div>
     </div>
   </div>
-  <div class="col-12 col-xl-4">
+  <div class="col-12 col-md-6 col-xl-4">
     <div class="card h-100 border-danger-subtle">
       <div class="card-header text-danger"><i class="bi bi-exclamation-octagon me-1"></i>3. KEK storage loss</div>
       <div class="card-body">
@@ -55,6 +55,44 @@
         </form>
         <% if (s.vault_status === 'KEYSTORE_MISSING') { %>
           <a href="/backups" class="btn btn-primary mt-2"><i class="bi bi-upload me-1"></i>Restore from backup</a>
+        <% } %>
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-md-6 col-xl-6">
+    <div class="card h-100 border-danger-subtle">
+      <div class="card-header text-danger"><i class="bi bi-person-x me-1"></i>4. Shred one customer's KEK (crypto-shredding)</div>
+      <div class="card-body">
+        <p class="small text-secondary">Removes <strong>every KEK version of one customer</strong> from the key store. Only that customer's sensitive data becomes unreadable (<code>KEK_NOT_FOUND</code>); the other customers keep working because each one has its own KEK. In the lab the material is moved to <code>/vault/keys/quarantine/</code> and stays in earlier backups, so a restore undoes it.</p>
+        <form method="post" action="/disaster/shred" id="shredForm" class="needs-validation" novalidate>
+          <input type="hidden" name="_csrf" value="<%= csrf %>">
+          <input type="hidden" name="confirm" value="">
+          <label for="shredOwner" class="form-label">Customer code</label>
+          <div class="input-group">
+            <input type="text" class="form-control mono" id="shredOwner" name="owner" value="CUS-0002" list="ownerList" pattern="[A-Za-z]+-[0-9]+" required>
+            <button class="btn btn-danger" type="submit" <%= s.vault_status !== 'READY' || !owners.length ? 'disabled' : '' %>
+              data-confirm="DESTRUCTIVE LAB ACTION: the KEKs of this customer are removed and its encrypted data becomes unreadable until a KEK backup is restored."
+              data-confirm-title="Shred one customer's KEK" data-confirm-word="SHRED"><i class="bi bi-scissors me-1"></i>Shred KEK</button>
+          </div>
+          <datalist id="ownerList"><% owners.forEach(o => { %><option value="<%= o %>"><% }) %></datalist>
+        </form>
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-xl-6">
+    <div class="card h-100">
+      <div class="card-header"><i class="bi bi-list-check me-1"></i>Shredded customer KEKs</div>
+      <div class="card-body p-0">
+        <% if (!s.shredded.length) { %>
+          <div class="empty-state"><i class="bi bi-check2-circle"></i><p class="mt-2 mb-0">No customer KEK is shredded.</p></div>
+        <% } else { %>
+        <div class="table-responsive"><table class="table table-sm align-middle mb-0">
+          <thead><tr><th>Customer</th><th>KEKs removed</th><th>Date</th><th>Quarantine copy</th></tr></thead>
+          <tbody><% s.shredded.forEach(x => { %>
+            <tr><td class="mono"><%= x.owner %></td><td class="mono small"><%= x.kek_ids.join(', ') %></td><td class="small"><%= fmtDate(x.at) %></td><td class="mono small"><%= x.quarantined_as %></td></tr>
+          <% }) %></tbody>
+        </table></div>
+        <div class="p-3 small">Undo it with <a href="/backups">Backup and recovery &gt; Restore</a> or <code>./scripts/restore.sh keys latest</code>.</div>
         <% } %>
       </div>
     </div>

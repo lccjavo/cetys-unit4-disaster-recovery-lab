@@ -38,9 +38,10 @@ function createApi(store, cfg) {
     res.json({
       status: 'ok',
       vault_status: s.vault_status,
-      active_kek_id: s.active_kek_id,
       access_disabled: s.access_disabled,
       kek_count: s.kek_count,
+      owner_count: s.owner_count,
+      active_kek_count: s.active_kek_count,
     });
   });
 
@@ -67,12 +68,12 @@ function createApi(store, cfg) {
   });
 
   app.post('/api/v1/wrap', (req, res) => {
-    res.json(store.wrap(req.body.dek_b64, req.body.context, req.actor));
+    res.json(store.wrap(req.body.dek_b64, req.body.context, req.body.owner, req.actor));
   });
 
   app.post('/api/v1/unwrap', (req, res) => {
-    const { kek_id, wrapped_dek, nonce, tag, context } = req.body || {};
-    res.json(store.unwrap({ kek_id, wrapped_dek, nonce, tag, context }, req.actor));
+    const { kek_id, wrapped_dek, nonce, tag, context, owner } = req.body || {};
+    res.json(store.unwrap({ kek_id, wrapped_dek, nonce, tag, context, owner }, req.actor));
   });
 
   app.post('/api/v1/rewrap', (req, res) => {
@@ -103,7 +104,13 @@ function createApi(store, cfg) {
   });
 
   app.post('/api/v1/admin/rotate', (req, res) => {
-    res.status(201).json(store.rotate(req.actor));
+    const body = req.body || {};
+    if (body.all === true) return res.status(201).json(store.rotateAll(req.actor));
+    return res.status(201).json(store.rotate(String(body.owner || ''), req.actor));
+  });
+
+  app.post('/api/v1/admin/shred', (req, res) => {
+    res.json(store.shred(String((req.body || {}).owner || ''), req.actor));
   });
 
   app.use((req, res) => res.status(404).json({ error: 'NOT_FOUND' }));

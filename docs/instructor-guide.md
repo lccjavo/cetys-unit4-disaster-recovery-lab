@@ -81,10 +81,11 @@ This guide complements the student documents:
 
 ### GUI demonstration (Lab 2)
 
-1. **Security and encryption** (hotel): shows that all 150 profiles have their 20 fields encrypted, unique DEKs, the `kek_id` table compared with the KEKs that exist, and a sample of the real ciphertext.
+1. **Security and encryption** (hotel): shows that all 150 profiles have their 20 fields encrypted, unique DEKs, that every customer points to its **own** active KEK (150 distinct `kek_id`), and a sample of the real ciphertext.
 2. **Recovery** (hotel): after `backup.sh db` the verified backup appears; after `lab2-recovery-point.sh` the point appears; after the PITR the last recovery appears with its duration, and the current server is `postgres-recovery`.
 3. **Key Vault dashboard**: the **unwrap** counter goes up every time someone reveals a value. During the keystore loss the dashboard shows *Keystore missing* in red.
-4. **Rotation** (optional, if time allows): rotate to `kek-v2`, create a customer, show that it gets `kek-v2` while CUS-0001 stays on `kek-v1`, and use **Re-wrap DEKs with the active KEK**.
+4. **Rotation** (optional, if time allows): rotate `CUS-0001` (it gets `kek-cus-0001-v2`, every other customer keeps its `-v1`), show that CUS-0001 still decrypts with the retired `-v1`, then use **Re-wrap DEKs with each customer's active KEK**. **Rotate all** creates a new version for every customer.
+5. **Crypto-shredding** (optional, Part 7.3): shred `CUS-0002` and show that only that customer becomes unreadable; restore with `./scripts/restore.sh keys latest`.
 
 ### Common mistakes in Lab 2
 

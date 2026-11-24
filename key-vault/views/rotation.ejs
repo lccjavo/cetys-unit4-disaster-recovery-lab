@@ -1,30 +1,45 @@
 <%- include('partials/header') %>
 <div class="page-header">
   <h1>Key rotation</h1>
-  <p class="lead">Create a new KEK version. Future wrapping uses the new version; earlier ones stay decryptable.</p>
+  <p class="lead">Create a new KEK version for one customer, or for every customer at once. Future wrapping uses the new version; earlier versions stay available for unwrapping.</p>
 </div>
 <div class="row g-3">
   <div class="col-12 col-lg-5">
     <div class="card">
-      <div class="card-header"><i class="bi bi-arrow-repeat me-1"></i>Controlled rotation</div>
+      <div class="card-header"><i class="bi bi-person-lock me-1"></i>Rotate one customer's KEK</div>
       <div class="card-body">
-        <p>Current active KEK: <span class="mono fw-semibold"><%= s.active_kek_id || 'none' %></span></p>
-        <p class="small text-secondary">Rotating generates <span class="mono">kek-v<%= s.kek_count + 1 %></span>, marks it active, retires the previous version and creates an automatic keystore backup.</p>
-        <form method="post" action="/rotation" id="rotateForm">
+        <form method="post" action="/rotation" class="needs-validation" novalidate>
           <input type="hidden" name="_csrf" value="<%= csrf %>">
-          <button type="submit" class="btn btn-cyan" <%= s.vault_status !== 'READY' ? 'disabled' : '' %>
-            data-confirm="A new KEK will be created and become active for all future wrapping. Earlier KEKs are kept."
-            data-confirm-title="Rotate KEK" data-confirm-variant="btn-cyan"><i class="bi bi-plus-circle me-1"></i>Create kek-v<%= s.kek_count + 1 %> and activate it</button>
+          <input type="hidden" name="scope" value="one">
+          <label for="owner" class="form-label">Customer code</label>
+          <div class="input-group">
+            <input type="text" class="form-control mono" id="owner" name="owner" value="<%= owner || 'CUS-0001' %>" pattern="[A-Za-z]+-[0-9]+" required>
+            <button type="submit" class="btn btn-cyan" <%= s.vault_status !== 'READY' ? 'disabled' : '' %> data-loading-text="Rotating..."><i class="bi bi-arrow-repeat me-1"></i>Rotate</button>
+          </div>
+          <div class="form-text">For example <code>CUS-0001</code>: <code>kek-cus-0001-v1</code> is retired and <code>kek-cus-0001-v2</code> becomes active. An automatic backup is created.</div>
+        </form>
+      </div>
+    </div>
+    <div class="card mt-3">
+      <div class="card-header"><i class="bi bi-people me-1"></i>Rotate every customer's KEK</div>
+      <div class="card-body">
+        <p class="small text-secondary">Creates a new version for each of the <strong><%= s.owner_count %></strong> customers and a single automatic backup.</p>
+        <form method="post" action="/rotation">
+          <input type="hidden" name="_csrf" value="<%= csrf %>">
+          <input type="hidden" name="scope" value="all">
+          <button type="submit" class="btn btn-outline-primary" <%= s.vault_status !== 'READY' || !s.owner_count ? 'disabled' : '' %>
+            data-confirm="Each of the <%= s.owner_count %> customers gets a new active KEK version. The current versions are retired and keep unwrapping the existing DEKs."
+            data-confirm-title="Rotate all customer KEKs" data-confirm-variant="btn-cyan"><i class="bi bi-arrow-repeat me-1"></i>Rotate all <%= s.owner_count %> customer KEKs</button>
         </form>
       </div>
     </div>
     <div class="card mt-3"><div class="card-body small">
       <h2 class="h6">How to verify it in the hotel</h2>
       <ol class="mb-0">
-        <li>Rotate the KEK here.</li>
-        <li>At <code>http://localhost:3000/customers/new</code> create a new customer.</li>
-        <li>On its <em>Encryption details</em> tab the <code>kek_id</code> is the new one.</li>
-        <li>An existing customer keeps <code>kek-v1</code> and can still reveal its data.</li>
+        <li>Rotate <code>CUS-0001</code> here.</li>
+        <li>In the hotel open <code>CUS-0001</code> and reveal: it still works with <code>kek-cus-0001-v1</code> (retired, unwrap only).</li>
+        <li>On <em>Security and encryption</em> click <em>Re-wrap DEKs</em>: CUS-0001 moves to <code>kek-cus-0001-v2</code>.</li>
+        <li>Every other customer is untouched: it keeps its own <code>-v1</code>.</li>
       </ol>
     </div></div>
   </div>
@@ -40,7 +55,7 @@
           <tbody>
           <% s.rotation_history.forEach(h => { %>
             <tr><td class="small"><%= fmtDate(h.at) %></td><td><span class="badge text-bg-light border"><%= h.action %></span></td>
-            <td class="mono small"><%= h.action === 'rotate' ? `${h.from} -> ${h.kek_id}` : (h.kek_id || ((h.added || []).length ? 'added: ' + h.added.join(', ') : (h.from_backup || ''))) %></td>
+            <td class="mono small"><%= h.action === 'rotate' ? `${h.from} -> ${h.kek_id}` : h.action === 'rotate-all' ? `${h.count} customers` : h.action === 'restore' ? `${h.added_count ?? (h.added || []).length} KEKs added from ${h.from_backup}` : (h.kek_id || '') %></td>
             <td class="small"><%= h.actor %></td></tr>
           <% }) %>
           </tbody></table></div>

@@ -1,31 +1,60 @@
 <%- include('partials/header') %>
 <div class="page-header">
   <h1>KEK management</h1>
-  <p class="lead">Key Encryption Key versions. Key material is never shown; only a truncated SHA-256 fingerprint.</p>
+  <p class="lead">Every customer has its own Key Encryption Key ring (<code>kek-cus-0001-v1</code>, <code>kek-cus-0001-v2</code>, ...). Key material is never shown; only a truncated SHA-256 fingerprint.</p>
+</div>
+<div class="row g-3 mb-3">
+  <div class="col-6 col-md-3"><div class="card stat-card h-100"><div class="card-body"><div class="stat-label">Customers with a KEK</div><div class="stat-value"><%= s.owner_count %></div></div></div></div>
+  <div class="col-6 col-md-3"><div class="card stat-card h-100"><div class="card-body"><div class="stat-label">KEK versions</div><div class="stat-value"><%= s.kek_count %></div></div></div></div>
+  <div class="col-6 col-md-3"><div class="card stat-card h-100"><div class="card-body"><div class="stat-label">Active</div><div class="stat-value"><%= s.active_kek_count %></div></div></div></div>
+  <div class="col-6 col-md-3"><div class="card stat-card h-100"><div class="card-body"><div class="stat-label">Retired (unwrap only)</div><div class="stat-value"><%= s.retired_kek_count %></div></div></div></div>
 </div>
 <div class="card">
   <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
-    <span><i class="bi bi-key me-1"></i>Registered KEKs (<%= s.kek_count %>)</span>
-    <a class="btn btn-sm btn-cyan" href="/rotation"><i class="bi bi-arrow-repeat me-1"></i>Rotate KEK</a>
+    <span><i class="bi bi-key me-1"></i>Registered KEKs (<%= keks.length %> of <%= s.kek_count %>)</span>
+    <form method="get" action="/keys" class="d-flex flex-wrap gap-2">
+      <input type="search" name="q" value="<%= q %>" class="form-control form-control-sm" placeholder="Customer, e.g. CUS-0001" aria-label="Filter by customer">
+      <select name="status" class="form-select form-select-sm" aria-label="Status" data-autosubmit>
+        <option value="" <%= !status ? 'selected' : '' %>>All</option>
+        <option value="active" <%= status === 'active' ? 'selected' : '' %>>Active</option>
+        <option value="retired" <%= status === 'retired' ? 'selected' : '' %>>Retired</option>
+      </select>
+      <button class="btn btn-sm btn-outline-secondary" type="submit"><i class="bi bi-search"></i></button>
+      <a class="btn btn-sm btn-cyan" href="/rotation"><i class="bi bi-arrow-repeat me-1"></i>Rotation</a>
+    </form>
   </div>
   <div class="card-body p-0">
     <% if (!s.keks.length) { %>
-      <div class="empty-state"><i class="bi bi-key"></i><p class="mt-2">No KEKs. <%= s.vault_status === 'KEYSTORE_MISSING' ? 'The keystore is missing: restore from a backup.' : 'The first KEK is created when ./scripts/seed.sh runs.' %></p></div>
+      <div class="empty-state"><i class="bi bi-key"></i><p class="mt-2">No KEKs. <%= s.vault_status === 'KEYSTORE_MISSING' ? 'The keystore is missing: restore from a backup.' : 'Each customer KEK is created when ./scripts/seed.sh encrypts that customer.' %></p></div>
+    <% } else if (!keks.length) { %>
+      <div class="empty-state"><i class="bi bi-search"></i><p class="mt-2 mb-0">No KEK matches the filter.</p></div>
     <% } else { %>
     <div class="table-responsive"><table class="table table-hover align-middle mb-0">
-      <thead><tr><th>kek_id</th><th>Version</th><th>Algorithm</th><th>Status</th><th>Created</th><th>Retired</th><th>Fingerprint</th><th class="text-end">Wrap</th><th class="text-end">Unwrap</th></tr></thead>
+      <thead><tr><th>Customer</th><th>kek_id</th><th>Version</th><th>Status</th><th>Created</th><th>Retired</th><th>Fingerprint</th><th class="text-end">Wrap</th><th class="text-end">Unwrap</th><th class="text-end">Action</th></tr></thead>
       <tbody>
-      <% s.keks.forEach(k => { %>
+      <% keks.forEach((k, i) => { %>
         <tr>
+          <td class="mono"><%= k.owner %></td>
           <td class="mono fw-semibold"><%= k.kek_id %></td>
           <td>v<%= k.version %></td>
-          <td><%= k.algorithm %></td>
-          <td><span class="badge text-bg-<%= k.status === 'active' ? 'success' : 'secondary' %>"><%= k.status === 'active' ? 'Active (wraps and unwraps)' : 'Retired (unwrap only)' %></span></td>
+          <td><span class="badge text-bg-<%= k.status === 'active' ? 'success' : 'secondary' %>"><%= k.status === 'active' ? 'Active' : 'Retired (unwrap only)' %></span></td>
           <td class="small"><%= fmtDate(k.created_at) %></td>
           <td class="small"><%= k.retired_at ? fmtDate(k.retired_at) : 'N/A' %></td>
           <td class="mono small"><%= k.fingerprint %></td>
           <td class="text-end"><%= k.usage.wrap %></td>
           <td class="text-end"><%= k.usage.unwrap %></td>
+          <td class="text-end">
+            <% if (k.status === 'active') { %>
+            <form method="post" action="/rotation" class="d-inline">
+              <input type="hidden" name="_csrf" value="<%= csrf %>">
+              <input type="hidden" name="owner" value="<%= k.owner %>">
+              <input type="hidden" name="back" value="keys">
+              <button type="submit" class="btn btn-sm btn-outline-primary"
+                data-confirm="<%= k.owner %> gets a new KEK version (v<%= k.version + 1 %>). <%= k.kek_id %> is retired and keeps unwrapping the existing DEK."
+                data-confirm-title="Rotate <%= k.owner %>" data-confirm-variant="btn-cyan"><i class="bi bi-arrow-repeat me-1"></i>Rotate</button>
+            </form>
+            <% } %>
+          </td>
         </tr>
       <% }) %>
       </tbody></table></div>
@@ -35,11 +64,11 @@
 <div class="row g-3 mt-1">
   <div class="col-12 col-md-6"><div class="card h-100"><div class="card-body small">
     <h2 class="h6"><i class="bi bi-info-circle text-cyan me-1"></i>Where the key material lives</h2>
-    <p class="mb-0">In the file <code>/vault/keys/keystore.json</code> on the <code>vault-keys</code> Docker volume, separate from PostgreSQL. PostgreSQL only stores the <code>kek_id</code>, which is a reference, and the wrapped DEK.</p>
+    <p class="mb-0">In the file <code>/vault/keys/keystore.json</code> on the <code>vault-keys</code> Docker volume, separate from PostgreSQL. PostgreSQL only stores each customer's <code>kek_id</code>, which is a reference, and the wrapped DEK. On every unwrap the Key Vault checks that the KEK belongs to the customer being decrypted.</p>
   </div></div></div>
   <div class="col-12 col-md-6"><div class="card h-100"><div class="card-body small">
     <h2 class="h6"><i class="bi bi-clock-history text-cyan me-1"></i>Historical KEKs</h2>
-    <p class="mb-0">Retired KEKs are not deleted: they keep unwrapping the DEKs that were wrapped with them. The hotel can migrate those DEKs to the active KEK with the re-wrap operation (Security page in the hotel app).</p>
+    <p class="mb-0">Retired KEKs are not deleted: they keep unwrapping the DEKs that were wrapped with them. The hotel can migrate each DEK to its customer's active KEK with the re-wrap operation (Security page in the hotel app).</p>
   </div></div></div>
 </div>
 <%- include('partials/footer') %>

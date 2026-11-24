@@ -143,18 +143,31 @@ function createGui(store, cfg) {
     res.render('dashboard', { title: 'Key Vault dashboard', s: store.summary(), events: store.state.events.slice(-8).reverse() });
   });
 
+  const ownerParam = (v) => String(v || '').trim().toUpperCase().slice(0, 40);
+
   app.get('/keys', (req, res) => {
-    res.render('keys', { title: 'KEK management', s: store.summary() });
+    const s = store.summary();
+    const q = ownerParam(req.query.q);
+    const status = ['active', 'retired'].includes(req.query.status) ? req.query.status : '';
+    const keks = s.keks
+      .filter((k) => (!q || k.owner.includes(q) || k.kek_id.toUpperCase().includes(q)) && (!status || k.status === status))
+      .sort((a, b) => a.owner.localeCompare(b.owner) || a.version - b.version);
+    res.render('keys', { title: 'KEK management', s, keks, q, status });
   });
 
   app.get('/rotation', (req, res) => {
-    res.render('rotation', { title: 'Key rotation', s: store.summary() });
+    res.render('rotation', { title: 'Key rotation', s: store.summary(), owner: ownerParam(req.query.owner) });
   });
 
   app.post('/rotation', (req, res) => {
-    const r = store.rotate(actor(req));
-    flash(req, 'success', `New active KEK: ${r.kek_id}. ${r.previous} is retired but still available for unwrapping. Automatic backup: ${r.backup}`);
-    res.redirect('/rotation');
+    if (req.body.scope === 'all') {
+      const r = store.rotateAll(actor(req));
+      flash(req, 'success', `Rotated the KEK of ${r.count} customers (for example ${r.sample.map((x) => `${x.previous} -> ${x.kek_id}`).join(', ')}). Retired versions still unwrap. Automatic backup: ${r.backup}`);
+      return res.redirect('/rotation');
+    }
+    const r = store.rotate(ownerParam(req.body.owner), actor(req));
+    flash(req, 'success', `${r.owner}: new active KEK ${r.kek_id}. ${r.previous} is retired but still available for unwrapping. Automatic backup: ${r.backup}`);
+    return res.redirect(req.body.back === 'keys' ? `/keys?q=${encodeURIComponent(r.owner)}` : '/rotation');
   });
 
   app.get('/backups', (req, res) => {
@@ -163,19 +176,21 @@ function createGui(store, cfg) {
 
   app.post('/backups', (req, res) => {
     const r = store.createBackup('manual', actor(req));
-    flash(req, 'success', `Backup created: ${r.file} (KEKs: ${r.kek_ids.join(', ')})`);
+    flash(req, 'success', `Backup created: ${r.file} (${r.kek_count} KEKs of ${r.owner_count} customers)`);
     res.redirect('/backups');
   });
 
   app.post('/backups/restore', (req, res) => {
     const r = store.restoreFromBackup(String(req.body.file || ''), actor(req));
-    const added = r.added.length ? `Added: ${r.added.join(', ')}.` : 'No KEK was missing.';
-    flash(req, 'success', `Restore from ${r.file} completed. ${added} Active KEK: ${r.active_kek_id}`);
+    const sample = r.added.slice(0, 5).join(', ') + (r.added.length > 5 ? ', ...' : '');
+    const added = r.added_count ? `Added ${r.added_count} missing KEKs (${sample}).` : 'No KEK was missing.';
+    flash(req, 'success', `Restore from ${r.file} completed. ${added} KEKs in the Key Vault: ${r.kek_count}.`);
     res.redirect('/backups');
   });
 
   app.get('/disaster', (req, res) => {
-    res.render('disaster', { title: 'Disaster simulation', s: store.summary(), backups: store.listBackups() });
+    const s = store.summary();
+    res.render('disaster', { title: 'Disaster simulation', s, backups: store.listBackups(), owners: Object.keys(store.keystore ? store.keystore.active : {}).sort() });
   });
 
   app.post('/disaster/access', (req, res) => {
@@ -203,6 +218,17 @@ function createGui(store, cfg) {
     }
     const r = store.simulateStorageLoss(actor(req));
     flash(req, 'danger', `KEK storage "lost". The file was moved to quarantine (${r.quarantined_as}). Restore from a backup.`);
+    return res.redirect('/disaster');
+  });
+
+  app.post('/disaster/shred', (req, res) => {
+    const owner = ownerParam(req.body.owner);
+    if (req.body.confirm !== 'SHRED') {
+      flash(req, 'danger', 'Incorrect confirmation. Type SHRED to continue.');
+      return res.redirect('/disaster');
+    }
+    const r = store.shred(owner, actor(req));
+    flash(req, 'danger', `Every KEK of ${r.owner} was removed (${r.kek_ids.join(', ')}). Only this customer's sensitive data is unreadable now. Quarantine copy: ${r.quarantined_as}. Restore from a backup to undo it.`);
     return res.redirect('/disaster');
   });
 

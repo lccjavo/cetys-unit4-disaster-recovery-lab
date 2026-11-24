@@ -50,17 +50,24 @@ function check(name, ok, detail = '') {
 
   const vh = await vault.health({ fresh: true });
   check('Key Vault connection', vh.available, vh.available ? `status ${vh.vault_status}` : `${vh.error}: ${vh.message}`);
-  check('Active KEK available', Boolean(vh.available && vh.active_kek_id), vh.active_kek_id || 'no active KEK');
+  check('Customer KEKs available in the Key Vault', Boolean(vh.available && vh.owner_count > 0), vh.available ? `${vh.owner_count} customers with a KEK, ${vh.kek_count} KEK versions` : 'Key Vault unavailable');
+
+  // Each customer must point to ITS OWN KEK (kek-cus-0001-vN for CUS-0001), never to another customer's.
+  const own = (await db.query(`SELECT count(*)::int AS total,
+        count(*) FILTER (WHERE k.kek_id LIKE 'kek-' || lower(c.customer_code) || '-v%')::int AS own,
+        count(DISTINCT k.kek_id)::int AS distinct_keks
+      FROM customer_keys k JOIN customers c ON c.id = k.customer_id`)).rows[0];
+  check('Every customer has its own KEK (kek_id matches the customer)', own.own === own.total && own.distinct_keks === own.total && own.total > 0, `${own.own}/${own.total} customers on their own KEK, ${own.distinct_keks} distinct kek_id`);
 
   if (vh.available) {
     const vs = await vault.status().catch(() => null);
     const known = new Set(vs ? vs.keks.map((k) => k.kek_id) : []);
-    const used = (await db.query('SELECT kek_id, count(*)::int AS n FROM customer_keys GROUP BY kek_id ORDER BY kek_id')).rows;
+    const used = (await db.query('SELECT DISTINCT kek_id FROM customer_keys ORDER BY kek_id')).rows;
     const unknown = used.filter((u) => !known.has(u.kek_id));
-    check('Every kek_id in PostgreSQL exists in the Key Vault', unknown.length === 0, used.map((u) => `${u.kek_id}: ${u.n}`).join(', '));
+    check('Every kek_id in PostgreSQL exists in the Key Vault', unknown.length === 0, unknown.length ? `missing: ${unknown.slice(0, 5).map((u) => u.kek_id).join(', ')}${unknown.length > 5 ? ', ...' : ''}` : `${used.length} kek_id found`);
   }
 
-  const rows = (await db.query(`SELECT c.id, s.encrypted_fields, k.dek_ref, k.wrapped_dek, k.dek_wrap_nonce, k.dek_wrap_tag, k.kek_id
+  const rows = (await db.query(`SELECT c.id, c.customer_code, s.encrypted_fields, k.dek_ref, k.wrapped_dek, k.dek_wrap_nonce, k.dek_wrap_tag, k.kek_id
       FROM customers c JOIN customer_sensitive_data s ON s.customer_id = c.id JOIN customer_keys k ON k.customer_id = c.id ORDER BY c.id`)).rows;
   let ok = 0;
   let firstError = '';
@@ -72,7 +79,7 @@ function check(name, ok, detail = '') {
       if (!firstError) firstError = `${err.code}: ${err.message}`;
     }
   }
-  check('End-to-end encryption and decryption', ok === rows.length && rows.length > 0, `${ok}/${rows.length} customers decrypted${firstError ? `; first error ${firstError}` : ''}`);
+  check('End-to-end encryption and decryption', ok === rows.length && rows.length > 0, `${ok}/${rows.length} customers decrypted with their own KEK${firstError ? `; first error ${firstError}` : ''}`);
   return finish();
 })().catch((err) => {
   check('Internal verification', false, err.message);

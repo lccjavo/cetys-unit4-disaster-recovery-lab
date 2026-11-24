@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Initializes the first KEK (if the Key Vault was never initialized) and generates the 150 fictional customers.
+# Initializes the Key Vault (if it was never initialized) and generates the 150 fictional customers,
+# each one with its OWN KEK (kek-cus-0001-v1, kek-cus-0002-v1, ...) created by the Key Vault.
 # Idempotent: if the database was already initialized, nothing changes.
 source "$(dirname "$0")/lib/common.sh"
 

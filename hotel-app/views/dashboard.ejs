@@ -16,7 +16,7 @@
        ['people-fill', 'Total users', c ? c.users : 'N/A', c ? `${c.customer_users} customers + ${c.users - c.customer_users} staff` : 'Database unavailable'],
        ['calendar2-week', 'Reservations', c ? c.reservations : 'N/A', c ? `${c.upcoming} pending or confirmed` : ''],
        ['shield-lock-fill', 'Encrypted profiles', c ? c.encrypted_profiles : 'N/A', c ? `${c.wrapped_deks} wrapped DEKs` : ''],
-       ['key-fill', 'Active KEK', d.vault.available ? (d.vault.active_kek_id || 'none') : 'N/A', d.vault.available ? `Key Vault: ${d.vault.vault_status}` : 'Key Vault unavailable'],
+       ['key-fill', 'Customer KEKs', d.vault.available ? (d.vault.owner_count ?? 'N/A') : 'N/A', d.vault.available ? `One KEK per customer · Key Vault: ${d.vault.vault_status}` : 'Key Vault unavailable'],
      ]; %>
   <% cards.forEach(([icon, label, value, sub]) => { %>
   <div class="col-12 col-md-6 col-xl-3">
@@ -52,11 +52,11 @@
         <div class="field-row d-flex justify-content-between"><span class="field-label">Connectivity</span>
           <span><span class="status-dot <%= d.vault.available ? 'ok' : 'down' %>"></span><%= d.vault.available ? 'Available' : 'Unavailable' %></span></div>
         <div class="field-row d-flex justify-content-between"><span class="field-label">Key store status</span><span><%= d.vault.vault_status || d.vault.error %></span></div>
-        <div class="field-row d-flex justify-content-between"><span class="field-label">Active KEK</span><span class="mono"><%= d.vault.active_kek_id || 'N/A' %></span></div>
+        <div class="field-row d-flex justify-content-between"><span class="field-label">Customers with their own KEK</span><span><%= d.vault.owner_count ?? 'N/A' %></span></div>
         <div class="field-row d-flex justify-content-between"><span class="field-label">KEK versions</span><span><%= d.vault.kek_count ?? 'N/A' %></span></div>
         <div class="field-row d-flex justify-content-between"><span class="field-label">Key access</span>
           <span class="badge text-bg-<%= d.vault.available && !d.vault.access_disabled ? 'success' : 'warning' %>"><%= d.vault.available ? (d.vault.access_disabled ? 'Disabled' : 'Enabled') : 'N/A' %></span></div>
-        <p class="small text-secondary mt-3 mb-0">Field algorithm: AES-256-GCM with one 256-bit DEK per customer, wrapped by the KEK.</p>
+        <p class="small text-secondary mt-3 mb-0">Field algorithm: AES-256-GCM with one 256-bit DEK per customer, wrapped by that customer's own KEK.</p>
       </div>
     </div>
   </div>

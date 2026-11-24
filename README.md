@@ -45,7 +45,7 @@ The repository contains two independent Node.js applications with Bootstrap 5 we
 | Application | What it does |
 |---|---|
 | **Hotel Management App** (`hotel-app`) | Multi-user customer and reservation management. 150 fictional customers, each with 20 sensitive fields encrypted with AES-256-GCM and 20 operational fields without application-level encryption. Administrator, staff and customer roles with object-level authorization. Security and disaster recovery dashboards. |
-| **Key Vault Management App** (`key-vault`) | Independent educational KMS. Generates, versions and rotates KEKs, wraps and unwraps DEKs, backs up and restores the key store, and simulates failures. It has its own administrator account. |
+| **Key Vault Management App** (`key-vault`) | Independent educational KMS. Keeps **one KEK per customer** (`kek-cus-0001-v1`, `kek-cus-0002-v1`, ...), versions and rotates them, wraps and unwraps DEKs, backs up and restores the key store, and simulates failures (including shredding one customer's KEK). It has its own administrator account. |
 
 The infrastructure uses real **PostgreSQL 17**: physical streaming replication, `pg_basebackup`, continuous WAL archiving and Point-in-Time Recovery. None of this is simulated by copying records.
 
@@ -58,6 +58,7 @@ After the two workshops, students will be able to:
 - Promote a standby while preventing split brain.
 - Create a physical backup, verify WAL archiving and restore to a named point before an accidental deletion.
 - Explain envelope encryption: why PostgreSQL stores the wrapped DEK and the `kek_id` but never the KEK.
+- Explain why each customer has its own KEK: rotating or destroying one customer's key (crypto-shredding) affects only that customer.
 - Show that a database backup without its keys cannot be used to read encrypted data, and that keys must be backed up independently.
 - Classify data (sensitive vs. operational) and observe the cost of selective encryption.
 - Recognize and prevent BOLA/IDOR vulnerabilities with backend authorization.
@@ -98,6 +99,7 @@ flowchart LR
 Key points:
 
 - **PostgreSQL never connects to the Key Vault.** The hotel application orchestrates all encryption and decryption.
+- **Every customer has its own KEK.** `customer_keys.kek_id` of customer `CUS-0001` is always `kek-cus-0001-v<N>`. The Key Vault creates that KEK the first time the customer's DEK is wrapped, and refuses to unwrap a DEK with a KEK that belongs to another customer.
 - The **Key Vault cryptographic API (8200) is not published** to the host; only the GUI (3001) is, on `127.0.0.1`.
 - The keys (`vault-keys`) and their backups (`vault-backups`) live in volumes **separate** from the PostgreSQL data and backups.
 - The hotel application picks its PostgreSQL server from the shared file `/lab-control/db-target`. The failover and PITR scripts update it, and the application reconnects on its own in about 2 seconds.
@@ -113,7 +115,8 @@ sequenceDiagram
   U->>H: POST /customers/1/reveal (session + CSRF token)
   H->>H: 1. Authentication and object-level authorization
   H->>P: 2. Read ciphertext, wrapped_dek, kek_id
-  H->>K: 3. unwrap(kek_id, wrapped_dek) with service token
+  H->>K: 3. unwrap(kek_id, wrapped_dek, owner = CUS-0001) with service token
+  K->>K: Checks that kek_id belongs to CUS-0001 (else KEK_OWNER_MISMATCH)
   K-->>H: Plaintext DEK (memory only)
   H->>H: 4. AES-256-GCM decrypt of the requested fields, wipe the DEK
   H-->>U: 5. Values for the authorized user only (audited without values)
@@ -169,7 +172,7 @@ cetys-unit4-disaster-recovery-lab/
 │   ├── src/store.js              KEK store, wrap/unwrap, backups, simulations
 │   ├── src/api.js                Internal API :8200 (service token)
 │   ├── src/gui.js                Administration GUI :3001
-│   ├── src/cli/admin.js          Internal CLI (backups, access, rotation)
+│   ├── src/cli/admin.js          Internal CLI (backups, access, rotation, shred)
 │   ├── views/, public/, test/
 ├── scripts/                      Lab operations (see table below)
 ├── docs/
@@ -184,7 +187,7 @@ cetys-unit4-disaster-recovery-lab/
 |---|---|
 | `setup-env.sh` / `setup-env.ps1` | Generates `.env` with random secrets (never overwrites without confirmation). |
 | `migrate.sh` | Creates or updates the schema, indexes, constraints, views and roles. Idempotent. |
-| `seed.sh` | Creates the first KEK (if none ever existed) and the 150 customers. Idempotent. |
+| `seed.sh` | Initializes the Key Vault (if it never was) and creates the 150 customers, each with its own KEK. Idempotent. |
 | `verify-setup.sh` | PASS/FAIL checks for the whole installation. |
 | `start.sh [base\|lab1]` | Starts the environment (with the standby for `lab1`). |
 | `stop.sh` | Stops containers without deleting volumes. |
@@ -313,7 +316,14 @@ See [section 9](#9-database-migration).
 ./scripts/seed.sh
 ```
 
-See [section 10](#10-initial-data-generation).
+See [section 10](#10-initial-data-generation). Expected end of the output:
+
+```text
+[seed] Decryption check: 150/150 customers decrypted with their own KEK (all 20 fields readable)
+[seed] Customer KEKs backed up: kek-backup-...-auto-seed.json (150 KEKs)
+...
+[seed] Wrapped DEKs: 150, each with its own customer KEK (150 KEKs: kek-cus-0001-v1 ... kek-cus-0150-v1)
+```
 
 ### Step 6: Start the complete application
 
@@ -355,12 +365,12 @@ OK  Migrations completed.
 `./scripts/seed.sh`:
 
 1. Checks PostgreSQL and the Key Vault.
-2. If the Key Vault was **never** initialized, creates `kek-v1` and an automatic backup. If it already has KEKs, it keeps them.
+2. If the Key Vault was **never** initialized, initializes its key store (and an automatic backup). If it already has KEKs, it keeps them.
 3. If the Key Vault lost its KEKs, it **stops** and reports it: it never generates incompatible replacement keys.
 4. Generates 150 reproducible fictional customers (the same seed always produces the same profiles), 3 staff accounts and 304 reservations.
-5. For each customer: generates a random 256-bit DEK, encrypts the 20 sensitive fields with AES-256-GCM (a fresh 96-bit nonce per field), asks the Key Vault to wrap the DEK, and **only then** runs the `INSERT`.
-6. Checks that exactly 150 customers exist and that all 150 decrypt with their 20 fields.
-7. Writes the `lab_metadata.seed_completed_at` marker.
+5. For each customer: generates a random 256-bit DEK, encrypts the 20 sensitive fields with AES-256-GCM (a fresh 96-bit nonce per field), and asks the Key Vault to wrap the DEK **with that customer's own KEK**. The Key Vault creates the customer's KEK on this first wrap (`CUS-0001` gets `kek-cus-0001-v1`) and returns its `kek_id`. **Only then** does the seed run the `INSERT`, storing that `kek_id` in `customer_keys`.
+6. Checks that exactly 150 customers exist, that there are 150 distinct KEKs (one per customer), and that all 150 decrypt with their own KEK and their 20 fields.
+7. Backs up the 150 new customer KEKs (`kek-backup-...-auto-seed.json`) and writes the `lab_metadata.seed_completed_at` marker.
 
 If the marker exists (including on a database restored with PITR), the seed does nothing: `The database was already initialized ... Nothing is regenerated.`
 
@@ -536,19 +546,23 @@ JOIN customer_sensitive_data s ON s.customer_id = c.id
 WHERE c.id = 1;
 ```
 
-6. Read the `kek_id`:
+6. Every customer has its own KEK (`kek_id` = `kek-<customer code>-v<N>`):
 
 ```sql
-SELECT customer_id, kek_id, dek_ref
-FROM customer_keys
-ORDER BY customer_id
+SELECT c.id AS customer_id, c.customer_code, k.kek_id, k.dek_ref
+FROM customer_keys k
+JOIN customers c ON c.id = k.customer_id
+ORDER BY c.id
 LIMIT 10;
 
-SELECT kek_id, count(*) AS customers
-FROM customer_keys
-GROUP BY kek_id
-ORDER BY kek_id;
+SELECT count(*) AS customers,
+       count(DISTINCT k.kek_id) AS distinct_keks,
+       count(*) FILTER (WHERE k.kek_id LIKE 'kek-' || lower(c.customer_code) || '-v%') AS on_their_own_kek
+FROM customer_keys k
+JOIN customers c ON c.id = k.customer_id;
 ```
+
+Expected: `CUS-0001 | kek-cus-0001-v1`, `CUS-0002 | kek-cus-0002-v1`, ... and `150 | 150 | 150`.
 
 7. Inspect a wrapped DEK:
 
@@ -566,7 +580,7 @@ FROM customer_keys
 WHERE customer_id = 1;
 ```
 
-`wrapped_bytes` is 32: the 256 bits of the DEK, but encrypted with the KEK.
+`wrapped_bytes` is 32: the 256 bits of the DEK, but encrypted with the KEK of customer 1 (`kek-cus-0001-v1`).
 
 8. User, customer, encrypted data and key relationship:
 
@@ -625,11 +639,11 @@ ORDER BY table_name, column_name;
 2. At http://localhost:3000 sign in as `admin@hotel-lab.test` and open **Customers > CUS-0001**.
 3. Open the **Personal information** tab and click **Reveal sensitive information**.
 4. Look at the decrypted phone number (for example `+52 664 555 ...`). It is the same value that DBeaver only shows as base64 ciphertext.
-5. Open the **Encryption details** tab and find the `kek_id` (for example `kek-v1`).
-6. Open http://localhost:3001, sign in as `vault_admin` and go to **KEKs**.
-7. Confirm that `kek-v1` exists, with its creation date and fingerprint.
+5. Open the **Encryption details** tab and find the `kek_id`: `kek-cus-0001-v1`, the KEK of this customer only.
+6. Open http://localhost:3001, sign in as `vault_admin` and go to **KEKs**. Filter by `CUS-0001`.
+7. Confirm that `kek-cus-0001-v1` exists, with its creation date and fingerprint. Filter by `CUS-0002`: it has a different KEK with a different fingerprint.
 
-Why does PostgreSQL store the wrapped DEK but not the KEK? If someone steals the database or a backup, they get ciphertext and wrapped DEKs. To open a DEK they also need the KEK, which lives in another system with separate access control. Separating the key from the data is the whole point of envelope encryption.
+Why does PostgreSQL store the wrapped DEK but not the KEK? If someone steals the database or a backup, they get ciphertext and wrapped DEKs. To open a DEK they also need the KEK, which lives in another system with separate access control. Separating the key from the data is the whole point of envelope encryption. Giving each customer its **own** KEK also limits the blast radius: one customer's key can be rotated, revoked or destroyed without touching anyone else.
 
 ### Step 7: Inspect encryption during a Key Vault failure
 
@@ -683,10 +697,10 @@ erDiagram
   customer_keys {
     bigint customer_id PK
     uuid dek_ref UK
-    text wrapped_dek "DEK encrypted with the KEK"
+    text wrapped_dek "DEK encrypted with the customer's KEK"
     text dek_wrap_nonce
     text dek_wrap_tag
-    text kek_id "reference, not the key"
+    text kek_id "kek-cus-0001-v1: reference, not the key"
     int encryption_schema_version
   }
   reservations {
@@ -712,7 +726,7 @@ erDiagram
 | `users` | One row per account. `role` controls access. |
 | `customers` | Customer profile: basic identity (`customer_code`, `full_name`, `status`) and the **20 operational fields**. |
 | `customer_sensitive_data` | The **20 encrypted sensitive fields**. Each JSONB key has `alg`, `v`, `nonce`, `ciphertext` and `tag`. |
-| `customer_keys` | The customer's DEK **wrapped** by the Key Vault, and the `kek_id` used to wrap it. |
+| `customer_keys` | The customer's DEK **wrapped** by the Key Vault with that customer's own KEK, and its `kek_id` (`kek-cus-0001-v1`). |
 | `reservations` | Reservations (ID, customer, room type, dates, status). |
 | `audit_events` | Audit log: sign-ins, reveals (field names only), denied attempts. |
 | `recovery_verifications` | Results of the **Verify recovery** button. |
@@ -736,9 +750,9 @@ The home page shows:
 
 - **Total users** (153: 150 customers + 3 staff) and **Reservations** (304).
 - **Encrypted profiles** and wrapped DEKs (150).
-- **Active KEK** (`kek-v1`) and the Key Vault status.
+- **Customer KEKs** (150: one per customer) and the Key Vault status.
 - **PostgreSQL** card: connectivity, target server, `cluster_name` (`pg-primary`), role (primary/standby), version, timeline and `system_identifier`.
-- **Key Vault** card: connectivity, key store status, KEK versions and key access.
+- **Key Vault** card: connectivity, key store status, customers with their own KEK, KEK versions and key access.
 - **Recent activity** (audit log).
 - **Connection incidents** detected by the app, with their duration (useful for measuring RTO).
 
@@ -752,7 +766,7 @@ In the top bar, the **DB** and **Key Vault** badges show the status at all times
 4. Click the eye icon for a **preview**, or **Profile** to open the details.
 5. **Overview** and **Preferences** show the operational data (no application encryption).
 6. Open **Personal information**: values appear masked (`••••••••••`).
-7. Click **Reveal sensitive information**: the server checks your role, asks the Key Vault to unwrap the DEK and decrypts. You will see the fictional phone, email, address, RFC and passport, and the KEK used.
+7. Click **Reveal sensitive information**: the server checks your role, asks the Key Vault to unwrap the DEK and decrypts. You will see the fictional phone, email, address, RFC and passport, and the KEK used (`kek-cus-0001-v1`).
 8. Open **Financial information** and reveal the test card, the fictional CLABE, income and balance.
 9. **Family and guests** shows fictional guests and children; **Reservations** shows the history.
 10. Open **Encryption details**: `dek_ref`, `kek_id`, wrapped DEK, wrapping nonce and tag, and a table with each field's nonce, tag and ciphertext. DEKs and KEKs are never shown in plaintext.
@@ -761,7 +775,7 @@ Try the authorization: sign in as `frontdesk@hotel-lab.test` and open CUS-0001. 
 
 ### New customer
 
-**Customers > New customer** groups the fields into tabs. **Generate fictional data** fills in the form. On save, the app creates a new DEK, encrypts the 20 fields, wraps the DEK with the active KEK and redirects to the new customer's **Encryption details**. If the Key Vault is unavailable, the customer is **not** saved (sensitive data is never stored unencrypted).
+**Customers > New customer** groups the fields into tabs. **Generate fictional data** fills in the form. On save, the app creates a new DEK, encrypts the 20 fields, asks the Key Vault to wrap the DEK with a **new KEK for this customer** (for example `kek-cus-0151-v1`, backed up automatically a moment later) and redirects to the new customer's **Encryption details**. If the Key Vault is unavailable, the customer is **not** saved (sensitive data is never stored unencrypted).
 
 ### Reservations
 
@@ -779,7 +793,7 @@ Pending or confirmed reservations can be cancelled (with a confirmation dialog).
 
 ### Security and encryption (administrator)
 
-Shows whether the fields are encrypted, unique DEKs, Key Vault status, DEKs per `kek_id` compared with the KEKs that exist in the Key Vault, cryptographic parameters, encrypted vs. operational size, and a sample of what PostgreSQL actually stores. The **Re-wrap DEKs with the active KEK** button migrates DEKs from retired KEKs to the active one without the DEK ever leaving the Key Vault.
+Shows whether the fields are encrypted, unique DEKs, Key Vault status, and each customer's `kek_id` compared with the Key Vault: on its own **active** KEK, on its own **retired** KEK, KEK **missing** from the Key Vault, or (never expected) a KEK of **another customer**. Also cryptographic parameters, encrypted vs. operational size, and a sample of what PostgreSQL actually stores. The **Re-wrap DEKs with each customer's active KEK** button moves every DEK from a retired version to its own customer's active version (`kek-cus-0001-v1` -> `kek-cus-0001-v2`) without the DEK ever leaving the Key Vault.
 
 ### Recovery (administrator)
 
@@ -806,21 +820,22 @@ URL: **http://localhost:3001**. Sign in as `vault_admin` / `VaultAdmin2026!` (an
 
 ### Dashboard
 
-Shows the key store health (`Available`, `Keystore missing` or `Not initialized`), the **active KEK**, the number of **KEK versions**, the **last backup**, the **wrap** and **unwrap** operation counters (plus denied/errors/rewrap), the availability of each key, and the rotation history with recent events.
+Shows the key store health (`Available`, `Keystore missing` or `Not initialized`), the number of **customers with a KEK**, the number of **KEK versions** (active and retired), the **last backup**, the **wrap** and **unwrap** operation counters (plus denied/errors/rewrap), the latest KEKs, and the rotation history with recent events.
 
 ### KEK Management
 
-A table with `kek-v1` (and later versions): version, algorithm, **Active** or **Retired (unwrap only)** status, creation date, retirement date, truncated SHA-256 fingerprint and usage. Key material is never shown.
+A table with every KEK: **customer** (owner), `kek_id` (`kek-cus-0001-v1`, later `-v2`, ...), version, **Active** or **Retired (unwrap only)** status, creation date, retirement date, truncated SHA-256 fingerprint and usage. Filter by customer code (`CUS-0001`) or status. Each active row has a **Rotate** button. Key material is never shown.
 
 ### Key Rotation
 
-1. On **Rotation** click **Create kek-v2 and activate it** and confirm. `kek-v2` is generated and becomes active, `kek-v1` is retired, and an automatic backup is created.
-2. In the hotel app create a customer at **Customers > New customer** (use **Generate fictional data**).
-3. On the new customer's **Encryption details** you will see `kek_id = kek-v2`.
-4. Open CUS-0001 (which uses `kek-v1`) and reveal: it still works because retired KEKs are kept.
-5. Optional: on **Security and encryption** click **Re-wrap DEKs with the active KEK** to migrate all 150 DEKs to `kek-v2`.
+Each customer's KEK rotates independently:
 
-Old KEKs are never deleted automatically.
+1. On **Rotation > Rotate one customer's KEK** type `CUS-0001` and click **Rotate** (or use the **Rotate** button on the KEK management row). `kek-cus-0001-v2` is generated and becomes active, `kek-cus-0001-v1` is retired, and an automatic backup is created. Every other customer keeps its own `-v1`.
+2. In the hotel open CUS-0001 and reveal: it still works, because its DEK is still wrapped with `kek-cus-0001-v1` and retired KEKs keep unwrapping.
+3. On **Security and encryption** click **Re-wrap DEKs with each customer's active KEK**: CUS-0001's DEK moves to `kek-cus-0001-v2`. Its **Encryption details** now show `kek_id = kek-cus-0001-v2`.
+4. Optional: **Rotate all N customer KEKs** creates a new version for every customer in one step (with a single backup); re-wrap again to move all DEKs.
+
+From the terminal: `docker compose exec key-vault node src/cli/admin.js rotate CUS-0001` or `... rotate all`. Old KEKs are never deleted automatically.
 
 ### Key Availability
 
@@ -831,13 +846,23 @@ Old KEKs are never deleted automatically.
 
 You can also simulate **Key Vault unavailable** (the API returns 503 to everything) or stop the real service with `docker compose stop key-vault`.
 
+### Shredding one customer's KEK (crypto-shredding)
+
+Because every customer has its own KEK, destroying one KEK makes **only that customer's** data unreadable. This is how "right to be forgotten" is often implemented over backups that cannot be edited.
+
+1. On **Disaster simulation > Shred one customer's KEK** type `CUS-0002`, click **Shred KEK** and type `SHRED`.
+2. In the hotel open CUS-0002 and reveal: `[KEK_NOT_FOUND]`. Open CUS-0003: it still decrypts normally.
+3. In the lab the KEK is moved to `/vault/keys/quarantine/` and remains in earlier backups. Undo it with **Backup and recovery > Restore** on the latest backup, or `./scripts/restore.sh keys latest`. (In a real crypto-shredding, the KEK would also be removed from every backup.)
+
+Terminal equivalent: `docker compose exec key-vault node src/cli/admin.js shred CUS-0002`.
+
 ### Key Backup and Recovery
 
-- **Create a backup:** **Backup and recovery > Back up KEKs now**, or `./scripts/backup.sh keys`.
+- **Create a backup:** **Backup and recovery > Back up KEKs now**, or `./scripts/backup.sh keys`. One backup holds the KEKs of every customer.
 - **Where it is stored:** the `cetys-disaster-recovery_vault-backups` volume, path `/vault/backups/kek-backup-<date>-<reason>.json`, encrypted with AES-256-GCM and a key derived (scrypt) from `VAULT_BACKUP_PASSPHRASE`. It is independent of the PostgreSQL backups (`pg-backups`).
 - **Simulate the loss:** **Disaster simulation > KEK storage loss**, type `LOSE-KEYSTORE`. The `keystore.json` file is moved to `/vault/keys/quarantine/` (not destroyed). The hotel shows **KEK not found**; the encrypted data is preserved.
 - **Restore:** on **Backup and recovery** click **Restore** on the most recent backup, or run `./scripts/restore.sh keys latest`. Only missing KEKs are added; an existing KEK with the same `kek_id` and different material is rejected.
-- **Verify:** in the hotel app reveal CUS-0001: the original data is readable again.
+- **Verify:** in the hotel app reveal CUS-0001: the original data is readable again. All 150 customer KEKs are back (check **KEK management**).
 
 Normal student experiments never destroy keys permanently.
 
@@ -845,7 +870,7 @@ Normal student experiments never destroy keys permanently.
 
 ```mermaid
 flowchart TB
-  KEK["KEK (kek-v1)<br/>lives ONLY in the Key Vault"] -- "wraps (AES-256-GCM)" --> WDEK["Wrapped DEK<br/>customer_keys.wrapped_dek"]
+  KEK["KEK of customer 1 (kek-cus-0001-v1)<br/>lives ONLY in the Key Vault"] -- "wraps (AES-256-GCM)" --> WDEK["Wrapped DEK of customer 1<br/>customer_keys.wrapped_dek"]
   DEK["Customer 1 DEK<br/>256 random bits<br/>memory only"] -. "wrapped before storage" .-> WDEK
   DEK -- "encrypts (AES-256-GCM, nonce per field)" --> F["20 encrypted fields<br/>customer_sensitive_data"]
   WDEK --> PG[("PostgreSQL")]
@@ -855,17 +880,19 @@ flowchart TB
 | | DEK (Data Encryption Key) | KEK (Key Encryption Key) |
 |---|---|---|
 | Encrypts | The 20 fields of **one** customer | The DEKs |
-| How many | One per customer (150+) | A few, versioned (`kek-v1`, `kek-v2`) |
+| How many | One per customer (150+) | One per customer too, versioned (`kek-cus-0001-v1`, `kek-cus-0001-v2`, ...) |
 | Stored in | PostgreSQL, **wrapped only** | The Key Vault only (`vault-keys`) |
 | Who sees it in plaintext | The app, in memory, for milliseconds | Only the Key Vault |
-| Rotation | Re-wrap without re-encrypting data | New version; older ones kept for unwrapping |
+| Rotation | Re-wrap without re-encrypting data | New version per customer (or for all); older ones kept for unwrapping |
 
 Details:
 
 - Every field uses a **fresh 96-bit nonce** and a **128-bit tag**.
 - The **AAD** of each field is `hotel-lab|field|v1|customer:<id>|field:<name>`. If a ciphertext is copied to another customer or another field, GCM verification fails (`DECRYPTION_AUTH_FAILED`).
 - The DEK is wrapped with AAD `kek_id + customer:<id> + dek_ref`.
-- The benefit for rotation: changing the KEK only requires re-wrapping 150 DEKs of 32 bytes, not re-encrypting 3,000 fields.
+- Each KEK records its **owner** (the customer code). On every unwrap the hotel sends the customer code and the Key Vault rejects a KEK that belongs to someone else (`KEK_OWNER_MISMATCH`), so a DEK can only be opened with its own customer's KEK.
+- The benefit for rotation: rotating a customer's KEK only requires re-wrapping its 32-byte DEK, not re-encrypting its 20 fields. Rotating everyone means re-wrapping 150 DEKs, not re-encrypting 3,000 fields.
+- The benefit of one KEK per customer: a compromised, rotated or shredded KEK affects one customer, not the whole database.
 - The Lab 2 lesson: **a database backup without its keys is unreadable**. The keys need their own separate, protected backup.
 
 ## 19. Lab 1: High Availability and Failover
@@ -953,9 +980,11 @@ The original primary, the backups and the WAL archive are **not modified** (they
 | Restore missing KEKs | Backup and recovery > Restore | `./scripts/restore.sh keys latest` |
 | Disable access | Disaster simulation > Key access | `docker compose exec key-vault node src/cli/admin.js access disable` |
 | Restore access | Disaster simulation > Restore access | `docker compose exec key-vault node src/cli/admin.js access enable` |
-| Rotate | Rotation | `docker compose exec key-vault node src/cli/admin.js rotate` |
+| Rotate one customer | Rotation (or KEK management > Rotate) | `docker compose exec key-vault node src/cli/admin.js rotate CUS-0001` |
+| Rotate every customer | Rotation > Rotate all | `docker compose exec key-vault node src/cli/admin.js rotate all` |
+| Shred one customer's KEK | Disaster simulation > Shred | `docker compose exec key-vault node src/cli/admin.js shred CUS-0002` |
 
-The Key Vault creates automatic backups when it is initialized and after every rotation. **Restoring PostgreSQL never touches the KEKs**, and the Key Vault never generates a replacement KEK when it detects that it lost its keys.
+The Key Vault creates automatic backups when it is initialized, after the seed, shortly after a new customer's KEK is created, and after every rotation. **Restoring PostgreSQL never touches the KEKs**, and the Key Vault never generates a replacement KEK when it detects that it lost its keys.
 
 Warning: if you change `VAULT_BACKUP_PASSPHRASE`, earlier backups can no longer be decrypted.
 
@@ -968,6 +997,7 @@ Warning: if you change `VAULT_BACKUP_PASSPHRASE`, earlier backups can no longer 
 | Port 3000 already in use | `lsof -i :3000` (Windows: `netstat -ano \| findstr :3000`) | Close the other program, or change `HOTEL_APP_PORT` in `.env` and run `docker compose up -d`. |
 | Port 3001 already in use | `lsof -i :3001` | Change `KEY_VAULT_APP_PORT` in `.env` and run `docker compose up -d`. |
 | Port 5433 already in use | `lsof -i :5433` | Change `POSTGRES_HOST_PORT` in `.env`, run `docker compose up -d` and use the new port in DBeaver. |
+| `$'\r': command not found` or `env: 'bash\r': No such file or directory` (Windows) | `file scripts/start.sh` shows `CRLF` | The repository was checked out with Windows line endings. Run `git config core.autocrlf false && git rm -rq --cached . && git reset --hard`, then `docker compose build`. Better: clone inside WSL2. |
 | `.env` missing | `ls -la .env` | `./scripts/setup-env.sh` |
 | PostgreSQL not ready | `docker compose ps postgres-primary` and `docker compose logs --tail 50 postgres-primary` | Wait for `healthy`. If it says `password authentication failed`, see the *Authentication failure* row. |
 | Key Vault not ready | `docker compose logs --tail 50 key-vault` | `docker compose up -d key-vault` and wait for `healthy`. |
@@ -978,7 +1008,8 @@ Warning: if you change `VAULT_BACKUP_PASSPHRASE`, earlier backups can no longer 
 | Tables missing | `./scripts/verify-setup.sh` (*schema* row) | `./scripts/migrate.sh` |
 | Seed data missing | `./scripts/verify-setup.sh` (*seed* row) | `./scripts/seed.sh`. If it says the database has data without a marker, use `./scripts/reset-lab.sh all`. |
 | Key Vault unavailable | Red badge in the hotel app; `docker compose ps key-vault` | `docker compose start key-vault`; in the Key Vault GUI check that the simulated outage and disabled access are both off. |
-| KEK not found | Hotel: `[KEK_NOT_FOUND]`; Key Vault: *Keystore missing* | `./scripts/restore.sh keys latest` or restore from the GUI. Never generate a new KEK for existing data. |
+| KEK not found | Hotel: `[KEK_NOT_FOUND]`; Key Vault: *Keystore missing* (all customers) or *Shredded customer KEKs* (one customer) | `./scripts/restore.sh keys latest` or restore from the GUI. Never generate a new KEK for existing data. |
+| Customer KEK of another customer | Hotel: `[KEK_OWNER_MISMATCH]` | The `kek_id` stored for that customer belongs to a different customer (the row was modified). Restore its original `kek_id` (`kek-<customer code>-v<N>`) or recover the database with PITR. |
 | Decryption authentication failure | Hotel: `[UNWRAP_FAILED]` or `[DECRYPTION_AUTH_FAILED]` | The KEK with that `kek_id` has different material, or the ciphertext was tampered with. Restore the original KEK from its backup; check `audit_events`. |
 | Standby replication lag | `./scripts/status.sh` (*Replication* section) | Wait a few seconds; check `docker compose logs postgres-standby`. If the standby disconnected: `./scripts/reset-lab.sh lab1`. |
 | PostgreSQL failover failure | Output of `./scripts/lab1-failover.sh` | If it says *SPLIT BRAIN*, stop the primary first (`docker compose stop postgres-primary`). If the standby is not running: `./scripts/start.sh lab1`. |
@@ -1027,7 +1058,7 @@ docker compose --profile lab1 --profile lab2 down -v
 
 This is an **educational** environment. Do not use it as a production foundation without redesigning it.
 
-- The Key Vault is a **simulated KMS**: it stores KEKs in a JSON file on a Docker volume, with no HSM, no hardware-protected master key for the store and no policy-based access control.
+- The Key Vault is a **simulated KMS**: it stores the per-customer KEKs in a JSON file on a Docker volume, with no HSM, no hardware-protected master key for the store and no policy-based access control.
 - Communication from hotel-app to key-vault uses HTTP inside the Docker network (no TLS or mTLS) and a shared service token. The DEK crosses that internal network in plaintext when unwrapped.
 - The GUIs use HTTP on `localhost`; cookies do not have the `Secure` flag. Sessions live in memory (lost when the container restarts).
 - The demo passwords are documented and identical for all fictional customers.

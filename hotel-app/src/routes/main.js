@@ -107,7 +107,7 @@ router.post('/security/rewrap', requireRole('admin'), async (req, res) => {
   try {
     const r = await status.rewrapAll();
     await audit(req, 'keys.rewrap', { targetType: 'customer_keys', details: r });
-    flash(req, r.failed ? 'warning' : 'success', `Re-wrap completed: ${r.ok} of ${r.candidates} DEKs migrated to ${r.activeKek}. Failed: ${r.failed}.`);
+    flash(req, r.failed ? 'warning' : 'success', r.candidates ? `Re-wrap completed: ${r.ok} of ${r.candidates} DEKs moved to their customer's active KEK. Failed: ${r.failed}.` : 'Every DEK already uses its customer\'s active KEK. Nothing to re-wrap.');
   } catch (err) {
     flash(req, 'danger', `Re-wrap failed: [${err.code || 'ERROR'}] ${err.message}`);
   }
